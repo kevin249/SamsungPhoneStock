@@ -4,6 +4,32 @@
 
 开源版不预置 MCP 服务地址或客户端 Key。公开 K 线可独立使用；MCP 通知、表盘实时快照、千档盘口和交易日历需要配置自己的兼容服务。凭据仅在使用者的手表本地保存。
 
+## 表盘预览
+
+四款独立表盘可同时安装，长按手表主屏即可切换。以下为盘面预览，图中的行情为示例。
+
+| 02 昼夜折面 | 07 砂丘地平线 |
+| :---: | :---: |
+| <img src="watchface/src/fold/res/drawable-nodpi/preview.png" alt="02 昼夜折面表盘" width="280"> | <img src="watchface/src/dune/res/drawable-nodpi/preview.png" alt="07 砂丘地平线表盘" width="280"> |
+| **16 青岚山脊** | **17 盐湖倒影** |
+| <img src="watchface/src/ridge/res/drawable-nodpi/preview.png" alt="16 青岚山脊表盘" width="280"> | <img src="watchface/src/salt/res/drawable-nodpi/preview.png" alt="17 盐湖倒影表盘" width="280"> |
+
+## APK 下载
+
+打开 [最新 Release](https://github.com/kevin249/SamsungPhoneStock/releases/latest) 下载，或使用下面的直接下载链接。安装包安装到 **Wear OS 手表**。
+
+| 安装包 | 内容 | 系统要求 |
+| --- | --- | --- |
+| [watch-mcp.apk](https://github.com/kevin249/SamsungPhoneStock/releases/latest/download/watch-mcp.apk) | 腕上盯盘应用 v0.6.6；为表盘提供行情和消息数据 | Android API 30 及以上的 Wear OS 手表 |
+| [dial-fold.apk](https://github.com/kevin249/SamsungPhoneStock/releases/latest/download/dial-fold.apk) | 02 昼夜折面 v1.3 | Wear OS 4 及以上 |
+| [dial-dune.apk](https://github.com/kevin249/SamsungPhoneStock/releases/latest/download/dial-dune.apk) | 07 砂丘地平线 v1.3 | Wear OS 4 及以上 |
+| [dial-ridge.apk](https://github.com/kevin249/SamsungPhoneStock/releases/latest/download/dial-ridge.apk) | 16 青岚山脊 v1.3 | Wear OS 4 及以上 |
+| [dial-salt.apk](https://github.com/kevin249/SamsungPhoneStock/releases/latest/download/dial-salt.apk) | 17 盐湖倒影 v1.3 | Wear OS 4 及以上 |
+
+Release 附有 [SHA256SUMS.txt](https://github.com/kevin249/SamsungPhoneStock/releases/latest/download/SHA256SUMS.txt) 校验文件。当前提供已签名的 Debug 构建，用于 ADB 侧载。先安装 `watch-mcp.apk`，再安装喜欢的表盘；表盘行情和消息需要在应用内配置自己的 MCP 服务。
+
+## 功能
+
 - 默认显示最近 48 根日 K，红涨绿跌；支持日 K、周 K、1 分钟和 5 分钟。
 - K 线页上滑切换下一只自选股，下滑切换上一只，按自选顺序首尾循环；左滑查看 MCP 通知，右滑返回，通知页上下滑动仍为滚动消息。顶部菜单「股票列表」合并切换和自选管理：左侧两行显示名称、代码，点击切换；右侧「↑」上移一位（第一只再上移则移到末尾，顺序自动保存），「−」直接删除，顶部「+」支持按代码、名称、拼音和拼音首字母搜索添加。另可切换周期和 MCP 设置。
 - K 线由手表直连东财，失败时降级腾讯和新浪，失败保留最后一帧。
@@ -25,7 +51,7 @@
 
 ## 安装和设置
 
-先按下方「开发和验证」构建 APK，并将 Android SDK 的 `platform-tools` 加入 `PATH`。
+从上方 Release 下载 `watch-mcp.apk` 和所需表盘 APK 到同一文件夹，并将 Android SDK 的 `platform-tools` 加入 `PATH`。也可按下方「开发和验证」自行构建。
 
 1. 手表与电脑连接同一 Wi-Fi。
 2. 手表「设置 → 关于手表 → 软件信息」，连续点击「软件版本」5 次。
@@ -37,7 +63,19 @@ $adb = 'adb'
 # 按提示输入手表配对码
 ```
 
-返回无线调试主页，使用主页上的连接端口（通常不同于配对端口）安装：
+返回无线调试主页，使用主页上的连接端口（通常不同于配对端口）。在下载 APK 的文件夹打开 PowerShell，先安装应用，再安装所需表盘：
+
+```powershell
+$device = '手表IP:连接端口'
+& $adb connect $device
+& $adb -s $device install -r .\watch-mcp.apk
+& $adb -s $device install -r .\dial-fold.apk
+# 其他表盘可同样安装：dial-dune.apk、dial-ridge.apk、dial-salt.apk
+```
+
+安装后，长按手表主屏，在「添加表盘」中选择对应名称。首次打开「腕上盯盘」完成通知权限和 MCP 设置；表盘数据由此应用提供。
+
+已克隆源码的用户，也可将下载的五个 APK 放入项目 `dist/` 文件夹，或先完成构建，再用脚本一次安装应用和全部表盘：
 
 ```powershell
 cd SamsungPhoneStock
