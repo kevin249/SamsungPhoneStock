@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature android:name="android.hardware.type.watch" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <queries>
+        <intent>
+            <action android:name="android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+            <data android:scheme="package" />
+        </intent>
+    </queries>
+    <application android:label="腕上盯盘" android:icon="@drawable/ic_launcher"
+        android:theme="@style/AppTheme" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules"
+        android:usesCleartextTraffic="true" android:supportsRtl="true">
+        <meta-data android:name="com.google.android.wearable.standalone" android:value="true" />
+        <service android:name=".DialProvider$Fold" android:label="02 昼夜折面 · 行情" android:exported="true" android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter><action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST"/></intent-filter>
+            <meta-data android:name="android.support.wearable.complications.SUPPORTED_TYPES" android:value="LONG_TEXT"/>
+            <meta-data android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS" android:value="300"/>
+            <meta-data android:name="android.support.wearable.complications.SAFE_WATCH_FACES" android:value="com.kevin.marketdial.fold"/>
+        </service>
+        <service android:name=".DialProvider$Dune" android:label="07 砂丘地平线 · 行情" android:exported="true" android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter><action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST"/></intent-filter>
+            <meta-data android:name="android.support.wearable.complications.SUPPORTED_TYPES" android:value="LONG_TEXT"/>
+            <meta-data android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS" android:value="300"/>
+            <meta-data android:name="android.support.wearable.complications.SAFE_WATCH_FACES" android:value="com.kevin.marketdial.dune"/>
+        </service>
+        <service android:name=".DialProvider$Ridge" android:label="16 青岚山脊 · 行情" android:exported="true" android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter><action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST"/></intent-filter>
+            <meta-data android:name="android.support.wearable.complications.SUPPORTED_TYPES" android:value="LONG_TEXT"/>
+            <meta-data android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS" android:value="300"/>
+            <meta-data android:name="android.support.wearable.complications.SAFE_WATCH_FACES" android:value="com.kevin.marketdial.ridge"/>
+        </service>
+        <service android:name=".DialProvider$Salt" android:label="17 盐湖倒影 · 行情" android:exported="true" android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter><action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST"/></intent-filter>
+            <meta-data android:name="android.support.wearable.complications.SUPPORTED_TYPES" android:value="LONG_TEXT"/>
+            <meta-data android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS" android:value="300"/>
+            <meta-data android:name="android.support.wearable.complications.SAFE_WATCH_FACES" android:value="com.kevin.marketdial.salt"/>
+        </service>
+        <service android:name=".McpService" android:exported="false" android:stopWithTask="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled persistent MCP notification subscription on the watch, with immediate vibration for new messages while the screen is off." />
+        </service>
+        <receiver android:name=".McpBootReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+        <activity android:name=".MainActivity" android:exported="true" android:taskAffinity="com.kevin.watchmcp" android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <receiver android:name=".DialChartTap" android:exported="false"/>
+        <service android:name=".DialProvider$Line" android:label="腕上行情" android:exported="true" android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter><action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST"/></intent-filter>
+            <meta-data android:name="android.support.wearable.complications.SUPPORTED_TYPES" android:value="SMALL_IMAGE"/>
+            <meta-data android:name="android.support.wearable.complications.SAFE_WATCH_FACES" android:value="com.kevin.marketdial.fold,com.kevin.marketdial.dune,com.kevin.marketdial.ridge,com.kevin.marketdial.salt"/>
+            <meta-data android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS" android:value="300"/>
+        </service>
+        <service android:name=".DialProvider$Candles" android:label="腕上行情" android:exported="true" android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter><action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST"/></intent-filter>
+            <meta-data android:name="android.support.wearable.complications.SUPPORTED_TYPES" android:value="SMALL_IMAGE"/>
+            <meta-data android:name="android.support.wearable.complications.SAFE_WATCH_FACES" android:value="com.kevin.marketdial.fold,com.kevin.marketdial.dune,com.kevin.marketdial.ridge,com.kevin.marketdial.salt"/>
+            <meta-data android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS" android:value="300"/>
+        </service>
+        <service android:name=".DialProvider$Book" android:label="腕上行情" android:exported="true" android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter><action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST"/></intent-filter>
+            <meta-data android:name="android.support.wearable.complications.SUPPORTED_TYPES" android:value="SMALL_IMAGE"/>
+            <meta-data android:name="android.support.wearable.complications.SAFE_WATCH_FACES" android:value="com.kevin.marketdial.fold,com.kevin.marketdial.dune,com.kevin.marketdial.ridge,com.kevin.marketdial.salt"/>
+            <meta-data android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS" android:value="300"/>
+        </service>
+        <service android:name=".DialProvider$Signals" android:label="腕上行情" android:exported="true" android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter><action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST"/></intent-filter>
+            <meta-data android:name="android.support.wearable.complications.SUPPORTED_TYPES" android:value="SMALL_IMAGE"/>
+            <meta-data android:name="android.support.wearable.complications.SAFE_WATCH_FACES" android:value="com.kevin.marketdial.fold,com.kevin.marketdial.dune,com.kevin.marketdial.ridge,com.kevin.marketdial.salt"/>
+            <meta-data android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS" android:value="300"/>
+        </service>
+    </application>
+</manifest>

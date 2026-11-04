@@ -1,0 +1,19 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.kevin.marketdial'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'com.kevin.marketdial'
+        minSdk 33
+        targetSdk 34
+        versionCode 4
+        versionName '1.3'
+    }
+    flavorDimensions 'design'
+    productFlavors {
+        fold  { dimension 'design'; applicationIdSuffix '.fold' }
+        dune  { dimension 'design'; applicationIdSuffix '.dune' }
+        ridge { dimension 'design'; applicationIdSuffix '.ridge' }
+        salt  { dimension 'design'; applicationIdSuffix '.salt' }
+    }
+}

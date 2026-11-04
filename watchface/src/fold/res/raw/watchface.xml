@@ -1,0 +1,122 @@
+<WatchFace width="360" height="360">
+    <UserConfigurations>
+        <ListConfiguration id="chartMode" displayName="chart_mode" defaultValue="0">
+            <ListOption id="0" displayName="intraday_line"/>
+            <ListOption id="1" displayName="minute_candles"/>
+        </ListConfiguration>
+        <ListConfiguration id="showDepth" displayName="order_depth" defaultValue="1">
+            <ListOption id="1" displayName="show_layer"/>
+            <ListOption id="0" displayName="hide_layer"/>
+        </ListConfiguration>
+        <ListConfiguration id="showMarks" displayName="trade_marks" defaultValue="1">
+            <ListOption id="1" displayName="show_layer"/>
+            <ListOption id="0" displayName="hide_layer"/>
+        </ListConfiguration>
+    </UserConfigurations>
+    <Scene backgroundColor="#000000">
+        <PartImage x="0" y="0" width="360" height="360">
+            <Variant mode="AMBIENT" target="alpha" value="0"/>
+            <Image resource="background"/>
+        </PartImage>
+        <PartText x="60" y="22" width="220" height="28" alpha="255">
+            <Variant mode="AMBIENT" target="alpha" value="0"/>
+            <Text align="CENTER"><Font family="sans-serif" size="14" color="#172732"><Template>%s.%s　%s<Parameter expression="[MONTH_Z]"/><Parameter expression="[DAY_Z]"/><Parameter expression="[DAY_OF_WEEK_S]"/></Template></Font></Text>
+        </PartText>
+        <DigitalClock x="0" y="0" width="360" height="360">
+        <TimeText x="18" y="32" width="228" height="89" format="hh:mm" hourFormat="24" align="CENTER" alpha="255">
+            <Variant mode="AMBIENT" target="alpha" value="0"/>
+            <Font family="sans-serif-light" size="64" color="#172732" />
+        </TimeText>
+    </DigitalClock>
+        <DigitalClock x="0" y="0" width="360" height="360">
+        <TimeText x="66" y="59" width="228" height="81" format="hh:mm" hourFormat="24" align="CENTER" alpha="0">
+            <Variant mode="AMBIENT" target="alpha" value="255"/>
+            <Font family="sans-serif-light" size="58" color="#C8CBCD" />
+        </TimeText>
+    </DigitalClock>
+        <ComplicationSlot x="0" y="0" width="360" height="360" slotId="1" displayName="market" supportedTypes="LONG_TEXT EMPTY" isCustomizable="FALSE">
+            <DefaultProviderPolicy primaryProvider="com.kevin.watchmcp/com.kevin.watchmcp.DialProvider$Fold" primaryProviderType="LONG_TEXT" defaultSystemProvider="EMPTY" defaultSystemProviderType="EMPTY"/>
+            <BoundingOval x="0" y="0" width="360" height="360"/>
+            <Complication type="LONG_TEXT">
+                <PartImage x="0" y="0" width="360" height="360">
+                    <Variant mode="AMBIENT" target="alpha" value="0"/>
+                    <Image resource="[COMPLICATION.SMALL_IMAGE]"/>
+                </PartImage>
+                <PartText x="24" y="161" width="312" height="40" alpha="0">
+            <Variant mode="AMBIENT" target="alpha" value="255"/>
+            <Text align="CENTER"><Font family="sans-serif" size="22" color="#BDC1C2"><Template>%s<Parameter expression="[COMPLICATION.TEXT]"/></Template></Font></Text>
+        </PartText>
+                <PartText x="42" y="239" width="276" height="30" alpha="0">
+            <Variant mode="AMBIENT" target="alpha" value="255"/>
+            <Text align="CENTER"><Font family="sans-serif" size="15" color="#959B9D"><Template>%s<Parameter expression="[COMPLICATION.TITLE]"/></Template></Font></Text>
+        </PartText>
+            </Complication>
+            <Complication type="EMPTY">
+                <PartText x="20" y="180" width="320" height="44" alpha="255">
+            <Variant mode="AMBIENT" target="alpha" value="0"/>
+            <Text align="CENTER"><Font family="sans-serif" size="16" color="#DAE6DB">长按表盘 · 选择腕上行情</Font></Text>
+        </PartText>
+            </Complication>
+        </ComplicationSlot>
+        <ComplicationSlot x="30" y="177" width="300" height="105" slotId="2" supportedTypes="SMALL_IMAGE EMPTY" isCustomizable="FALSE">
+            <DefaultProviderPolicy primaryProvider="com.kevin.watchmcp/com.kevin.watchmcp.DialProvider$Book" primaryProviderType="SMALL_IMAGE" defaultSystemProvider="EMPTY" defaultSystemProviderType="EMPTY"/>
+            <BoundingRoundBox x="0" y="0" width="300" height="105"/>
+            <Complication type="SMALL_IMAGE">
+                <Condition>
+                    <Expressions><Expression name="visible">[CONFIGURATION.showDepth] == 1</Expression></Expressions>
+                    <Compare expression="visible">
+                        <PartImage x="0" y="0" width="300" height="105">
+                            <Variant mode="AMBIENT" target="alpha" value="0"/>
+                            <Image resource="[COMPLICATION.SMALL_IMAGE]"/>
+                        </PartImage>
+                    </Compare>
+                </Condition>
+            </Complication>
+        </ComplicationSlot>
+        <ComplicationSlot x="30" y="177" width="300" height="105" slotId="3" supportedTypes="SMALL_IMAGE EMPTY" isCustomizable="FALSE">
+            <DefaultProviderPolicy primaryProvider="com.kevin.watchmcp/com.kevin.watchmcp.DialProvider$Line" primaryProviderType="SMALL_IMAGE" defaultSystemProvider="EMPTY" defaultSystemProviderType="EMPTY"/>
+            <BoundingRoundBox x="0" y="0" width="300" height="105"/>
+            <Complication type="SMALL_IMAGE">
+                <Condition>
+                    <Expressions><Expression name="visible">[CONFIGURATION.chartMode] == 0</Expression></Expressions>
+                    <Compare expression="visible">
+                        <PartImage x="0" y="0" width="300" height="105" tintColor="#F7F5EA">
+                            <Variant mode="AMBIENT" target="alpha" value="0"/>
+                            <Image resource="[COMPLICATION.SMALL_IMAGE]"/>
+                        </PartImage>
+                    </Compare>
+                </Condition>
+            </Complication>
+        </ComplicationSlot>
+        <ComplicationSlot x="30" y="177" width="300" height="105" slotId="4" supportedTypes="SMALL_IMAGE EMPTY" isCustomizable="FALSE">
+            <DefaultProviderPolicy primaryProvider="com.kevin.watchmcp/com.kevin.watchmcp.DialProvider$Candles" primaryProviderType="SMALL_IMAGE" defaultSystemProvider="EMPTY" defaultSystemProviderType="EMPTY"/>
+            <BoundingRoundBox x="0" y="0" width="300" height="105"/>
+            <Complication type="SMALL_IMAGE">
+                <Condition>
+                    <Expressions><Expression name="visible">[CONFIGURATION.chartMode] == 1</Expression></Expressions>
+                    <Compare expression="visible">
+                        <PartImage x="0" y="0" width="300" height="105">
+                            <Variant mode="AMBIENT" target="alpha" value="0"/>
+                            <Image resource="[COMPLICATION.SMALL_IMAGE]"/>
+                        </PartImage>
+                    </Compare>
+                </Condition>
+            </Complication>
+        </ComplicationSlot>
+        <ComplicationSlot x="30" y="177" width="300" height="105" slotId="5" supportedTypes="SMALL_IMAGE EMPTY" isCustomizable="FALSE">
+            <DefaultProviderPolicy primaryProvider="com.kevin.watchmcp/com.kevin.watchmcp.DialProvider$Signals" primaryProviderType="SMALL_IMAGE" defaultSystemProvider="EMPTY" defaultSystemProviderType="EMPTY"/>
+            <BoundingRoundBox x="0" y="0" width="300" height="105"/>
+            <Complication type="SMALL_IMAGE">
+                <Condition>
+                    <Expressions><Expression name="visible">[CONFIGURATION.showMarks] == 1</Expression></Expressions>
+                    <Compare expression="visible">
+                        <PartImage x="0" y="0" width="300" height="105">
+                            <Variant mode="AMBIENT" target="alpha" value="0"/>
+                            <Image resource="[COMPLICATION.SMALL_IMAGE]"/>
+                        </PartImage>
+                    </Compare>
+                </Condition>
+            </Complication>
+        </ComplicationSlot>
+    </Scene>
+</WatchFace>

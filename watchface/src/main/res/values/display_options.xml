@@ -1,0 +1,9 @@
+<resources>
+    <string name="chart_mode">行情图</string>
+    <string name="intraday_line">实时分时</string>
+    <string name="minute_candles">1 分钟蜡烛图</string>
+    <string name="order_depth">千档挂单分布</string>
+    <string name="trade_marks">MCP 买卖标记</string>
+    <string name="show_layer">显示</string>
+    <string name="hide_layer">隐藏</string>
+</resources>

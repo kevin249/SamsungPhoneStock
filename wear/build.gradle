@@ -1,0 +1,26 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.kevin.watchmcp'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'com.kevin.watchmcp'
+        minSdk 30
+        targetSdk 34
+        versionCode 12
+        versionName '0.6.6'
+        testInstrumentationRunner 'com.kevin.watchmcp.DirectClientInstrumentation'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildTypes { release { minifyEnabled false } }
+}
+
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+dependencies {
+    implementation 'androidx.wear.watchface:watchface-complications-data-source:1.2.1'
+    testImplementation 'junit:junit:4.13.2'
+}
