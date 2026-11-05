@@ -298,10 +298,15 @@ final class PhoneCandleView extends View {
     private void footer(Canvas c,int x,int end,int y,int color) {
         String state = theme == LOCK_BLACK ? overlayStatus
                 : paused ? "已暂停" : PhoneChartOptions.intervalLabel(rate);
-        label(c,state,end,y,30,color,SANS,Paint.Align.RIGHT,(end-x)*.55f);
-        float available = Math.max(1f, end-x-paint.measureText(state)-26);
         String info = feedStatus.isEmpty() ? quoteAt : feedStatus;
-        label(c,info,x,y,27,color,SANS,Paint.Align.LEFT,available);
+        String issue = " · " + plot.bookLabel();
+        if (chartOptions.depth && info.endsWith(issue)) info = info.substring(0,info.length()-issue.length());
+        paint.setTypeface(SANS);
+        paint.setTextSize(30);
+        float width = end-x-26;
+        float size = 30 * Math.min(1f,width / (paint.measureText(info)+paint.measureText(state)));
+        label(c,info,x,y,size,color,SANS,Paint.Align.LEFT,width);
+        label(c,state,end,y,size,color,SANS,Paint.Align.RIGHT,width);
     }
 
     private void ambient(Canvas c) {

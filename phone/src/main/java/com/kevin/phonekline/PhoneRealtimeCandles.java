@@ -321,7 +321,17 @@ final class PhoneRealtimeCandles {
         if (book==null) return false;
         LocalDateTime observed=localTime(book.optString("source_at"));
         LocalDateTime latest=localTime(chart.optString("quote_at"));
-        if (observed==null || latest==null || !observed.toLocalDate().toString().equals(chart.optString("date"))) return false;
+        if (observed==null || latest==null || !latest.toLocalDate().toString().equals(chart.optString("date"))) return false;
+        if (!observed.toLocalDate().equals(latest.toLocalDate())) {
+            // 0559 dates the receipt, including polls made after midnight. Only attach
+            // these to a completed session before the next possible opening auction.
+            if (!"client_received".equals(book.optString("source_time_kind"))
+                    || latest.getHour()!=15 || latest.getMinute()!=0 || !observed.isAfter(latest)) return false;
+            LocalDate next=latest.toLocalDate().plusDays(1);
+            while (next.getDayOfWeek().getValue()>=6) next=next.plusDays(1);
+            LocalDateTime auction=next.atTime(9,15);
+            return now.isBefore(auction) && observed.isBefore(auction);
+        }
         // At lunch or after close an old morning book must not look like a closing book.
         LocalDateTime reference=tradingMinute(now)?now:latest;
         return !observed.isBefore(reference.minusSeconds(30));

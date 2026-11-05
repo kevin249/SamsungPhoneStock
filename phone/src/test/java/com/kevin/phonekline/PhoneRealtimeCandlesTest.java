@@ -117,6 +117,12 @@ public class PhoneRealtimeCandlesTest {
         assertEquals("client_received",normalized.getString("source_time_kind"));
         JSONObject chart=new JSONObject().put("date",day).put("quote_at",day+" 15:00:00");
         assertTrue(PhoneRealtimeCandles.bookFitsChart(normalized,chart,afterClose));
+        LocalDateTime overnight=LocalDateTime.parse("2026-11-06T00:04:20");
+        JSONObject midnight=PhoneRealtimeCandles.copy(normalized).put("source_at",overnight.toString());
+        assertTrue(PhoneRealtimeCandles.bookFitsChart(midnight,chart,overnight));
+        assertFalse(PhoneRealtimeCandles.bookFitsChart(midnight,chart,overnight.withHour(9).withMinute(15)));
+        midnight.put("source_time_kind","exchange");
+        assertFalse(PhoneRealtimeCandles.bookFitsChart(midnight,chart,overnight));
         assertFalse(PhoneRealtimeCandles.bookFitsChart(normalized,chart.put("date","2026-11-04"),afterClose));
     }
 

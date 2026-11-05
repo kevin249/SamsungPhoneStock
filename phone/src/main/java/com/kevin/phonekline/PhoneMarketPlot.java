@@ -156,7 +156,8 @@ final class PhoneMarketPlot {
         JSONObject book = showDepth ? snapshot.optJSONObject("book") : null;
         if (book == null) return;
         String at = book.optString("source_at");
-        if (at.length() >= 10 && !at.startsWith(session)) return;
+        if (at.length() >= 10 && !at.startsWith(session)
+                && !PhoneRealtimeCandles.bookFitsChart(book,snapshot,PhoneRealtimeCandles.now())) return;
         JSONArray levels = book.optJSONArray("levels");
         for (int i = 0; levels != null && i < levels.length(); i++) {
             JSONObject row = levels.optJSONObject(i);
