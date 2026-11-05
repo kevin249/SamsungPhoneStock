@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <queries>
+        <package android:name="com.samsung.android.goodlock" />
+        <package android:name="com.samsung.systemui.lockstar" />
+    </queries>
+    <uses-feature android:name="android.software.live_wallpaper" android:required="false" />
+    <application android:label="息屏 K 线" android:icon="@drawable/ic_phone_dial" android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="false" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules">
+        <activity android:name=".PhoneDialActivity" android:exported="true" android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <receiver android:name=".PhoneMarketWidgetProvider" android:label="@string/phone_market_widget_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/phone_market_widget" />
+        </receiver>
+        <service android:name=".PhoneWidgetRefreshService" android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name=".PhoneLiveMarketService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <receiver android:name=".PhoneLiveSchedule" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
+        <service android:name=".PhoneWallpaperService"
+            android:label="@string/market_wallpaper_title"
+            android:exported="true" android:permission="android.permission.BIND_WALLPAPER">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data android:name="android.service.wallpaper" android:resource="@xml/market_wallpaper" />
+        </service>
+        <service android:name=".PhoneMarketDreamService"
+            android:label="@string/market_dream_title"
+            android:exported="true" android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data android:name="android.service.dream" android:resource="@xml/market_dream" />
+        </service>
+    </application>
+</manifest>

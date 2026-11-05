@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="#000000" android:padding="8dp">
+    <LinearLayout android:id="@+id/widget_quote_row" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:gravity="center_vertical" android:baselineAligned="false">
+        <TextView android:id="@+id/widget_price" style="@style/WidgetMarketLine"
+            android:fontFamily="sans-serif-black" android:textSize="40sp" />
+        <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+            android:paddingStart="5dp" android:paddingEnd="0dp" android:orientation="vertical" android:gravity="end">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:gravity="end|center_vertical" android:baselineAligned="false">
+                <TextView android:id="@+id/widget_name" style="@style/WidgetMarketLine" android:layout_width="0dp"
+                    android:layout_weight="1" android:gravity="end" android:textStyle="bold" />
+                <TextView android:id="@+id/widget_code" style="@style/WidgetMarketLine" android:paddingStart="4dp" android:paddingEnd="0dp" />
+            </LinearLayout>
+            <TextView android:id="@+id/widget_change" style="@style/WidgetMarketLine" android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+    <TextView android:id="@+id/widget_chart_legend" style="@style/WidgetMarketLine" />
+    <ImageView android:id="@+id/widget_plot" android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:scaleType="fitXY" android:visibility="gone"
+        android:contentDescription="@string/phone_market_chart_description" />
+    <TextView android:id="@+id/widget_stamp" style="@style/WidgetMarketLine" />
+</LinearLayout>

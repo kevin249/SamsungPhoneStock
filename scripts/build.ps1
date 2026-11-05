@@ -17,8 +17,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "手表应用构建或检查失败" }
     New-Item -ItemType Directory -Force -Path (Join-Path $projectRoot "dist") | Out-Null
     Copy-Item -LiteralPath (Join-Path $projectRoot "wear\build\outputs\apk\debug\wear-debug.apk") -Destination (Join-Path $projectRoot "dist\watch-mcp.apk")
+    Copy-Item -LiteralPath (Join-Path $projectRoot "phone\build\outputs\apk\debug\phone-debug.apk") -Destination (Join-Path $projectRoot "dist\phone-kline.apk")
     foreach ($design in @('fold', 'dune', 'ridge', 'salt')) {
         Copy-Item -LiteralPath (Join-Path $projectRoot "watchface\build\outputs\apk\$design\debug\watchface-$design-debug.apk") -Destination (Join-Path $projectRoot "dist\dial-$design.apk")
     }
     Write-Host "可安装 APK：$projectRoot\dist\watch-mcp.apk"
+    Write-Host "手机 APK：$projectRoot\dist\phone-kline.apk"
 } finally { Pop-Location }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="market_wallpaper_title">行情动态壁纸</string>
+    <string name="market_wallpaper_description">显示所选主题、时钟和股票行情。显示位置由系统壁纸设置决定。</string>
+    <string name="market_dream_title">行情低亮屏保</string>
+</resources>
