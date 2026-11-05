@@ -487,7 +487,8 @@ final class PhoneMarketPlot {
                 largest = Math.max(largest, rowVolumes[side][row]);
             }
         }
-        float stroke = height / rows * .78f;
+        float stroke = height / rows * .94f;
+        float maxBarWidth = (right - left) * .72f;
         for (int side = 0; side < 2; side++) {
             paint.setColor(side == 0 ? rise : fall);
             paint.setAlpha(widget ? 248 : 184);
@@ -498,7 +499,7 @@ final class PhoneMarketPlot {
                 // of the same side share their volume-weighted price on the same axis.
                 double price = rowPriceVolumes[side][row] / volume;
                 float y = priceY(price, bottom, height);
-                float length = (float)((right - left) * .46 * volume / largest);
+                float length = (float)(maxBarWidth * volume / largest);
                 paint.setStrokeWidth(side == 1 && rowVolumes[0][row] > 0 ? stroke * .5f : stroke);
                 canvas.drawLine(right - length, y, right, y, paint);
             }
