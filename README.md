@@ -18,7 +18,7 @@
 
 ### 三星手机行情与锁屏壁纸
 
-按下方「开发和验证」从 `main` 构建手机 v1.13，安装生成的 `dist/phone-kline.apk`（Android 8.0 及以上），打开「息屏 K 线」。手机支持三星息屏行情（AOD）、亮屏锁定时的动态壁纸、充电闲置时的屏保。三种模式共用股票、图表和取数设置。锁屏壁纸与充电屏保另有一个共用主题选择器。
+按下方「开发和验证」从默认分支构建手机 v1.13，安装生成的 `dist/phone-kline.apk`（Android 8.0 及以上），打开「息屏 K 线」。手机支持三星息屏行情（AOD）、亮屏锁定时的动态壁纸、充电闲置时的屏保。三种模式共用股票、图表和取数设置。锁屏壁纸与充电屏保另有一个共用主题选择器。
 
 「行情设置」支持按代码、中文名、拼音全拼或首字母查找股票。「1 分钟 K 线」在全屏主题中显示最近 60 根分钟蜡烛，在三星息屏行情小组件中按当天交易时间定位。小组件的两种图都从左侧 09:30 延伸到右侧 15:00，折叠午休，尚无数据的时段留空。「显示千档挂单」与「显示 B/S 买卖标记」可分别开关。
 
@@ -149,7 +149,7 @@ $mcpUrl = Read-Host '输入自己的 HTTPS MCP URL'
 使用 JDK 17、Android SDK 34、Gradle 8.9 / AGP 8.6.1：
 
 ```powershell
-git clone --branch main https://github.com/kevin249/SamsungPhoneStock.git
+git clone https://github.com/kevin249/SamsungPhoneStock.git
 cd SamsungPhoneStock
 .\scripts\build.ps1
 ```
