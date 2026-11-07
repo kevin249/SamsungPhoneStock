@@ -156,7 +156,12 @@ final class PhoneStockPicker extends LinearLayout {
             item.setMinHeight(dp(48));
             item.setTextColor(INK);
             item.setBackgroundTintList(ColorStateList.valueOf(0xff18241e));
-            item.setOnClickListener(v -> { if (version == generation) select(stock.symbol); });
+            item.setOnClickListener(v -> {
+                if (version != generation) return;
+                getContext().getSharedPreferences("phone_dial",Context.MODE_PRIVATE).edit()
+                        .putString("stock_name_"+stock.symbol,stock.name).apply();
+                select(stock.symbol);
+            });
             results.addView(item, new LayoutParams(-1, -2));
         }
     }

@@ -63,6 +63,8 @@ final class PhoneCandleView extends View {
         }
     };
     private PhoneMarketPlot plot;
+    private PhoneCandleView lower;
+    private String periodOverride;
 
     PhoneCandleView(Context context) {
         super(context);
@@ -87,6 +89,7 @@ final class PhoneCandleView extends View {
         }
         if (target == theme) return;
         theme = target;
+        if (lower != null) lower.setTheme(target);
         art = null;
         shownMinute = Long.MIN_VALUE;
         invalidate();
@@ -113,6 +116,7 @@ final class PhoneCandleView extends View {
     void setRefreshState(int rate, boolean paused) {
         this.rate = Math.max(1, rate);
         this.paused = paused;
+        if (lower != null) lower.setRefreshState(rate,paused);
         invalidate();
     }
 
@@ -152,11 +156,18 @@ final class PhoneCandleView extends View {
     }
 
     private void updateDescription() {
-        setContentDescription(feedStatus.isEmpty() ? marketDescription : marketDescription + "，" + feedStatus);
+        setContentDescription((feedStatus.isEmpty() ? marketDescription : marketDescription + "，" + feedStatus)
+                + (lower == null ? "" : "；下方：" + lower.getContentDescription()));
+    }
+
+    void setUpperPeriod(String period) {
+        periodOverride = period;
+        refreshChartOptions();
     }
 
     void refreshChartOptions() {
-        PhoneChartOptions next = new PhoneChartOptions(preferences);
+        PhoneChartOptions next = periodOverride == null ? new PhoneChartOptions(preferences)
+                : new PhoneChartOptions(preferences, periodOverride);
         if (chartOptions.matches(next)) return;
         chartOptions = next;
         setMarket(marketSnapshot, selectedSymbol);
@@ -223,6 +234,14 @@ final class PhoneCandleView extends View {
         if (surface == Surface.AMBIENT) drawClock(c);
         if (surface == Surface.DREAM)
             label(c,hhmm,W/2,173,145,Color.WHITE,SANS,Paint.Align.CENTER,600);
+        if (lower != null && surface != Surface.AMBIENT) {
+            drawStockPanel(c,550);
+            paint.setColor(0xff454545); paint.setStrokeWidth(1);
+            c.drawLine(42,1290,1038,1290,paint);
+            lower.drawStockPanel(c,1320);
+            c.restoreToCount(frame);
+            return;
+        }
         switch (theme) {
             case 95: bookshop(c); break;
             case 96: convenience(c); break;
@@ -319,6 +338,40 @@ final class PhoneCandleView extends View {
         chart(c,81,start-48,999,start,start+345,dim,0xff2d3732);
         footer(c,start+405,dim);
     }
+    void setLowerMarket(JSONObject data, String code, String status) {
+        if (code == null || code.isEmpty()) {
+            lower = null;
+        } else {
+            if (lower == null) lower = new PhoneCandleView(getContext());
+            lower.theme = theme;
+            lower.setRefreshState(rate,paused);
+            lower.periodOverride = PhoneDisplayStocks.mode(preferences);
+            lower.chartOptions = new PhoneChartOptions(preferences, lower.periodOverride);
+            lower.setMarket(data,code);
+            lower.setFeedStatus(status);
+        }
+        updateDescription();
+        invalidate();
+    }
+
+    private void drawStockPanel(Canvas c, int top) {
+        int main = 0xfff5f5f2, dim = 0xffb8bebc;
+        left(c,symbol,42,top,32,dim);
+        if (periodOverride != null || !chartOptions.intraday)
+            right(c,chartOptions.legend(plot),1038,top,32,dim);
+        paint.setTypeface(HEAVY); paint.setTextSize(76);
+        float gap = 32;
+        float textWidth = paint.measureText(name)+paint.measureText(price)+paint.measureText(change);
+        float size = 76 * Math.min(1f,(996-2*gap)/textWidth);
+        paint.setTextSize(size);
+        float priceEnd = 1038-paint.measureText(change)-gap;
+        stock(c,42,top+50,size,main,HEAVY,996);
+        label(c,price,priceEnd,top+50,size,main,HEAVY,Paint.Align.RIGHT,996);
+        label(c,change,1038,top+50,size,changeColor,HEAVY,Paint.Align.RIGHT,996);
+        plot.draw(c,42,top+142,1038,top+660,RED,GREEN,dim,0xff555555);
+        footer(c,57,1020,top+700,dim);
+    }
+
     private void marketBoard(Canvas c) {
         boolean graphite = theme == LOCK_GRAPHITE;
         int main = graphite ? 0xffe9eae5 : 0xfff5f5f2;

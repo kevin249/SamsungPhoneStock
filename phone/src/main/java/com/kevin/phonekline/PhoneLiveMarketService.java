@@ -16,8 +16,10 @@ import android.os.PowerManager;
 import android.os.SystemClock;
 
 import org.json.JSONObject;
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 
-/** User-enabled, screen-off quote subscription during the Shanghai trading sessions. */
+/** User-enabled market subscription, including depth while the ambient widget is visible. */
 public final class PhoneLiveMarketService extends Service {
     private static final String CHANNEL = "aod_live_market";
     private static final String DISABLE = "com.kevin.phonekline.DISABLE_LIVE_MARKET";
@@ -45,6 +47,7 @@ public final class PhoneLiveMarketService extends Service {
     private PhoneSamplingRate rates;
     private JSONObject pending, received;
     private long nextFrame;
+    private long submittedFrames, lastSubmittedAt;
 
     static boolean isStreaming() { return streaming; }
 
@@ -55,7 +58,7 @@ public final class PhoneLiveMarketService extends Service {
         rates.start();
         prefs.registerOnSharedPreferenceChangeListener(changed);
         NotificationManager notices = getSystemService(NotificationManager.class);
-        notices.createNotificationChannel(new NotificationChannel(CHANNEL, "盘中持续更新", NotificationManager.IMPORTANCE_LOW));
+        notices.createNotificationChannel(new NotificationChannel(CHANNEL, "息屏行情持续更新", NotificationManager.IMPORTANCE_LOW));
         PowerManager power = getSystemService(PowerManager.class);
         wake = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PhoneKline:MarketSession");
         wake.setReferenceCounted(false);
@@ -85,7 +88,7 @@ public final class PhoneLiveMarketService extends Service {
     private void checkWindow() {
         main.removeCallbacks(guard);
         boolean enabled = PhoneLiveSchedule.enabled(this);
-        if (!enabled || !PhoneLiveSchedule.inWindow(this)) {
+        if (!enabled || !PhoneLiveSchedule.shouldStream(this)) {
             if (enabled) publishLatest();
             detach();
             stopSelf();
@@ -106,7 +109,7 @@ public final class PhoneLiveMarketService extends Service {
         String key = address.isEmpty() ? "" : PhoneSecretStore.load(prefs);
         streaming = true;
         session = new PhoneQuoteSession(this::onQuote);
-        session.start(symbol, address, key, rates.current(), PhoneMarketWidgetProvider.latest(this));
+        session.startDisplay(symbol, address, key, rates.current(), PhoneMarketWidgetProvider.latest(this));
     }
 
     private void onQuote(JSONObject quote, String status) {
@@ -126,6 +129,8 @@ public final class PhoneLiveMarketService extends Service {
         pending = null;
         if (data == null || !streaming || !prefs.getBoolean("live_aod_enabled", false)) return;
         PhoneMarketWidgetProvider.publishStream(this, data);
+        submittedFrames++;
+        lastSubmittedAt = SystemClock.elapsedRealtime();
         nextFrame = SystemClock.uptimeMillis() + FRAME_MS;
     }
 
@@ -146,7 +151,7 @@ public final class PhoneLiveMarketService extends Service {
         return new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_phone_dial)
                 .setContentTitle("息屏行情正在更新")
-                .setContentText("盘中持续更新息屏小组件，休市后转为系统定时刷新")
+                .setContentText("盘中更新成交与盘口，休市时在息屏显示期间更新盘口")
                 .setContentIntent(open).setOnlyAlertOnce(true).setOngoing(true).setShowWhen(false)
                 .addAction(new Notification.Action.Builder(null, "停止持续更新", disable).build())
                 .build();
@@ -165,4 +170,21 @@ public final class PhoneLiveMarketService extends Service {
     }
 
     @Override public IBinder onBind(Intent intent) { return null; }
+
+    @Override protected void dump(FileDescriptor fd, PrintWriter out, String[] args) {
+        out.println("streaming=" + streaming + " ambient=" + PhoneLiveSchedule.ambientDisplay(this)
+                + " rate_hz=" + rates.current() + " cpu_lock=" + wake.isHeld());
+        out.println("submitted_frames=" + submittedFrames + " last_submit_age_ms="
+                + (lastSubmittedAt == 0 ? -1 : SystemClock.elapsedRealtime() - lastSubmittedAt));
+        if (session != null) {
+            PhoneQuoteSession.RateSample sample = session.sample();
+            out.println("trade_sent=" + sample.tradeSentTotal + " trade_ok=" + sample.tradeOkTotal
+                    + " depth_sent=" + sample.depthSentTotal + " depth_ok=" + sample.depthOkTotal);
+        }
+        if (received != null) {
+            JSONObject book = received.optJSONObject("book");
+            out.println("quote_at=" + received.optString("quote_at")
+                    + " book_at=" + (book == null ? "" : book.optString("source_at")));
+        }
+    }
 }

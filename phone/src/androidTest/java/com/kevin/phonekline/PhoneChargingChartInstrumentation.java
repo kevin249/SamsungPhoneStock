@@ -44,12 +44,16 @@ final class PhoneChargingChartInstrumentation {
 
     private static final class Geometry extends Canvas {
         private final int[] chart;
+        private final float priceBottom;
         private float topPrice = Float.POSITIVE_INFINITY, bottomPrice = Float.NEGATIVE_INFINITY;
         private float gridRight = Float.NaN, bidRight = Float.NaN, askRight = Float.NaN;
         private float lastTradeX = Float.NEGATIVE_INFINITY, timeRight = Float.NaN;
         private float bidY = Float.NaN, askY = Float.NaN;
 
-        Geometry(int[] chart) { this.chart = chart; }
+        Geometry(int[] chart) {
+            this.chart = chart;
+            priceBottom = chart[3]-44-(chart[3]-44-chart[1]-15)*.26f-5;
+        }
 
         @Override public void drawText(String text,float x,float y,Paint paint) {
             if ("15:00".equals(text) && paint.getTextAlign() == Paint.Align.RIGHT) timeRight=x;
@@ -57,14 +61,14 @@ final class PhoneChargingChartInstrumentation {
 
         @Override public void drawCircle(float x,float y,float radius,Paint paint) {
             // The two intraday segments each contain only their actual close.
-            if (y >= chart[1] && y <= chart[3]) {
+            if (y >= chart[1] && y <= priceBottom) {
                 lastTradeX=Math.max(lastTradeX,x);
                 observePrice(y);
             }
         }
 
         @Override public void drawLine(float x0,float y0,float x1,float y1,Paint paint) {
-            if (y0 < chart[1] || y0 > chart[3] || y0 != y1) return;
+            if (y0 < chart[1] || y0 > priceBottom || y0 != y1) return;
             float length = Math.abs(x1-x0), right = Math.max(x0,x1);
             int redMinusGreen = Color.red(paint.getColor()) - Color.green(paint.getColor());
             if (length == 0 && Math.abs(redMinusGreen) > 20) observePrice(y0); // flat candle wick
@@ -74,7 +78,7 @@ final class PhoneChargingChartInstrumentation {
         }
 
         private void observePrice(float y) {
-            if (y >= chart[1] && y <= chart[3]) {
+            if (y >= chart[1] && y <= priceBottom) {
                 topPrice = Math.min(topPrice,y);
                 bottomPrice = Math.max(bottomPrice,y);
             }

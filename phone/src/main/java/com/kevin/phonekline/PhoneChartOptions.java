@@ -6,15 +6,21 @@ import org.json.JSONObject;
 /** The canvas and RemoteViews use identical chart and overlay settings. */
 final class PhoneChartOptions {
     final boolean intraday, signals, depth;
+    final String period;
 
     PhoneChartOptions(SharedPreferences prefs) {
-        intraday = "realtime".equals(prefs.getString("chart_mode", "1m"));
+        this(prefs, prefs.getString("chart_mode", "1m"));
+    }
+
+    PhoneChartOptions(SharedPreferences prefs, String period) {
+        this.period = period;
+        intraday = "realtime".equals(period);
         signals = prefs.getBoolean("show_signals", true);
         depth = prefs.getBoolean("show_depth", true);
     }
 
     boolean matches(PhoneChartOptions other) {
-        return intraday == other.intraday && signals == other.signals && depth == other.depth;
+        return period.equals(other.period) && intraday == other.intraday && signals == other.signals && depth == other.depth;
     }
 
     PhoneMarketPlot build(JSONObject snapshot) {
@@ -25,7 +31,7 @@ final class PhoneChartOptions {
         return new PhoneMarketPlot(snapshot, intraday, signals, depth, true);
     }
 
-    String title() { return intraday ? "分时" : "1 分钟 K 线"; }
+    String title() { return intraday ? "分时" : "1d".equals(period) ? "1day" : "1 分钟 K 线"; }
 
     static String intervalLabel(int hz) {
         String seconds = hz == 1 ? "1" : Double.toString(1.0 / hz);

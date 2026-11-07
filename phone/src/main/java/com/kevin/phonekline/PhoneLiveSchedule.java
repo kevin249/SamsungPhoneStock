@@ -8,6 +8,10 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.PowerManager;
+import android.hardware.display.DisplayManager;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Display;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -19,6 +23,46 @@ public final class PhoneLiveSchedule extends BroadcastReceiver {
     private static final String WAKE = "com.kevin.phonekline.START_MARKET_WINDOW";
     private static final LocalTime OPEN = LocalTime.of(9, 30), LUNCH = LocalTime.of(11, 30);
     private static final LocalTime REOPEN = LocalTime.of(13, 0), CLOSE = LocalTime.of(15, 0);
+    private static DisplayManager observedDisplays;
+    private static DisplayManager.DisplayListener displayListener;
+
+    static boolean ambientDisplay(Context context) {
+        Display display = context.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
+        return display != null && isAmbientState(display.getState());
+    }
+
+    static boolean isAmbientState(int state) {
+        return state == Display.STATE_DOZE || state == Display.STATE_DOZE_SUSPEND;
+    }
+
+    static boolean shouldStream(Context context) {
+        return ambientDisplay(context) || inWindow(context);
+    }
+
+    // A widget-only installation also needs the screen transition, without a visible Activity.
+    private static void observeDisplay(Context context, boolean enabled) {
+        if (!enabled) {
+            if (observedDisplays != null) observedDisplays.unregisterDisplayListener(displayListener);
+            observedDisplays = null;
+            displayListener = null;
+            return;
+        }
+        if (observedDisplays != null) return;
+        Context app = context.getApplicationContext();
+        observedDisplays = app.getSystemService(DisplayManager.class);
+        displayListener = new DisplayManager.DisplayListener() {
+            @Override public void onDisplayAdded(int id) { syncFromDisplay(app); }
+            @Override public void onDisplayRemoved(int id) { }
+            @Override public void onDisplayChanged(int id) {
+                if (id == Display.DEFAULT_DISPLAY) syncFromDisplay(app);
+            }
+        };
+        observedDisplays.registerDisplayListener(displayListener, new Handler(Looper.getMainLooper()));
+    }
+
+    static void syncFromDisplay(Context context) {
+        if (enabled(context) && ambientDisplay(context) && !PhoneLiveMarketService.isStreaming()) start(context);
+    }
 
     private static boolean weekday(LocalDate date) {
         return date.getDayOfWeek() != DayOfWeek.SATURDAY && date.getDayOfWeek() != DayOfWeek.SUNDAY;
@@ -70,7 +114,9 @@ public final class PhoneLiveSchedule extends BroadcastReceiver {
     }
 
     static void armNext(Context c) {
-        if (!enabled(c)) {
+        boolean active = enabled(c);
+        observeDisplay(c, active);
+        if (!active) {
             c.getSystemService(AlarmManager.class).cancel(intent(c));
             return;
         }
@@ -84,10 +130,12 @@ public final class PhoneLiveSchedule extends BroadcastReceiver {
         c.getSharedPreferences("phone_dial", Context.MODE_PRIVATE).edit().putBoolean("live_aod_enabled", false).apply();
         c.getSystemService(AlarmManager.class).cancel(intent(c));
         c.stopService(new Intent(c, PhoneLiveMarketService.class));
+        observeDisplay(c, false);
     }
 
     static void syncFromActivity(android.app.Activity activity) {
         armNext(activity);
+        syncFromDisplay(activity);
         if (!enabled(activity) || !marketHours(PhoneRealtimeCandles.now())) return;
         if (PhoneLiveTradingDay.confirmed(activity)) start(activity);
         else PhoneLiveTradingDay.refresh(activity, () -> {
@@ -108,6 +156,7 @@ public final class PhoneLiveSchedule extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent message) {
         Context app = context.getApplicationContext();
         armNext(app);
+        syncFromDisplay(app);
         if (!enabled(app) || !marketHours(PhoneRealtimeCandles.now())) return;
         if (!WAKE.equals(message.getAction())) {
             setAlarm(app, PhoneRealtimeCandles.now().plusSeconds(1));

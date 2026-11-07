@@ -56,6 +56,7 @@ public final class PhoneMarketWidgetProvider extends AppWidgetProvider {
         render(context, manager, ids, latest(context));
         PhoneWidgetRefreshService.schedule(context, true);
         PhoneLiveSchedule.armNext(context);
+        PhoneLiveSchedule.syncFromDisplay(context);
     }
 
     @Override public void onAppWidgetOptionsChanged(Context context, AppWidgetManager manager, int id, Bundle options) {

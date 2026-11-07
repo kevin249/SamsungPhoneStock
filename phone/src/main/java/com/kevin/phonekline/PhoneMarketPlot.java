@@ -26,7 +26,7 @@ final class PhoneMarketPlot {
     private static final double[] TDW_LEVELS = {.2, .5, 3.2, 3.5};
     private static final int[] TDW_COLORS = {0xff93db70, 0xffffff00, 0xff00c6c6, 0xffff75ff};
     private static final int TDW_INK = 0xffa8a8a8;
-    private final boolean intraday, sessionAxis;
+    private final boolean intraday, sessionAxis, daily;
     private float formingEnd = Float.NaN;
     private final List<Candle> bars = new ArrayList<>();
     private final List<Fill> fills = new ArrayList<>();
@@ -61,9 +61,9 @@ final class PhoneMarketPlot {
         double tdw = Double.NaN;
         double priorTdw = Double.NaN;
         int tdwEvents;
-        Candle(JSONObject row, String minute) {
+        Candle(JSONObject row, String minute, boolean daily) {
             this.minute = minute;
-            slot = sessionMinute(minute);
+            slot = daily ? (int)java.time.LocalDate.parse(minute.substring(0,10)).toEpochDay() : sessionMinute(minute);
             afternoon = minute.substring(11).compareTo("13:00") >= 0;
             firstTick = row.optString("first_tick_at");
             open = row.optDouble("open");
@@ -90,8 +90,9 @@ final class PhoneMarketPlot {
     }
 
     PhoneMarketPlot(JSONObject snapshot, boolean intraday, boolean showSignals, boolean showDepth, boolean widget) {
-        this.intraday = intraday;
-        sessionAxis = intraday || widget;
+        daily = snapshot != null && "1d".equals(snapshot.optString("period"));
+        this.intraday = intraday && !daily;
+        sessionAxis = !daily && (intraday || widget);
         bookLabel = snapshot == null ? "暂无盘口" : snapshot.optString("book_status","暂无盘口");
         if (bookLabel.isEmpty()) bookLabel = "暂无盘口";
         dayHigh = snapshot == null ? Double.NaN : snapshot.optDouble("high");
@@ -108,8 +109,8 @@ final class PhoneMarketPlot {
             String stamp = minute(row.optString("time"));
             if (stamp.isEmpty()) continue;
             if (session.length() != 10) session = stamp.substring(0, 10);
-            if (!stamp.startsWith(session)) continue;
-            Candle candle = new Candle(row, stamp);
+            if (!daily && !stamp.startsWith(session)) continue;
+            Candle candle = new Candle(row, stamp, daily);
             if (candle.valid()) reverse.add(candle);
         }
         calculateTdw(reverse);
@@ -119,7 +120,7 @@ final class PhoneMarketPlot {
             Candle candle = reverse.get(i);
             candle.average = intraday ? averages.getOrDefault(candle.minute,Double.NaN) : movingAverage(reverse,i);
             hasAverage |= PhoneRealtimeCandles.positive(candle.average);
-            index.put(candle.minute, bars.size());
+            index.put(daily ? candle.minute.substring(0,10) : candle.minute, bars.size());
             bars.add(candle);
             low = Math.min(low, candle.low);
             high = Math.max(high, candle.high);
@@ -145,7 +146,8 @@ final class PhoneMarketPlot {
         for (int i = 0; trades != null && i < trades.length(); i++) {
             JSONObject trade = trades.optJSONObject(i);
             if (trade == null) continue;
-            Integer position = index.get(minute(trade.optString("bar_time", trade.optString("time"))));
+            String fillTime = minute(trade.optString("bar_time", trade.optString("time")));
+            Integer position = index.get(daily && fillTime.length() >= 10 ? fillTime.substring(0,10) : fillTime);
             String side = trade.optString("side");
             double price = trade.optDouble("price");
             if (position == null || !("B".equals(side) || "S".equals(side)) || !Double.isFinite(price)
@@ -211,13 +213,13 @@ final class PhoneMarketPlot {
         }
     }
 
-    private static double movingAverage(List<Candle> newestFirst, int index) {
+    private double movingAverage(List<Candle> newestFirst, int index) {
         if (index + 4 >= newestFirst.size()) return Double.NaN;
         Candle current = newestFirst.get(index);
         double total = current.close;
         for (int offset = 1; offset < 5; offset++) {
             Candle earlier = newestFirst.get(index+offset);
-            if (earlier.slot != current.slot-offset) return Double.NaN;
+            if (!daily && earlier.slot != current.slot-offset) return Double.NaN;
             total += earlier.close;
         }
         return total / 5;
@@ -330,7 +332,7 @@ final class PhoneMarketPlot {
         float labelEnd = x0 + 7 + Math.max(PhoneRealtimeCandles.positive(dayHigh) ? paint.measureText(format(dayHigh)) : 0,
                 PhoneRealtimeCandles.positive(dayLow) ? paint.measureText(format(dayLow)) : 0);
         if (bars.isEmpty()) {
-            caption(c, intraday ? "等待分时行情" : "等待一分钟 K 线", (labelEnd + right) / 2,
+            caption(c, daily ? "等待日 K 行情" : intraday ? "等待分时行情" : "等待一分钟 K 线", (labelEnd + right) / 2,
                     (top + bottom) / 2, 32, text, Paint.Align.CENTER);
             drawDayRange(c, x0, y0, y1, axisText);
             if (widget) {
@@ -342,8 +344,8 @@ final class PhoneMarketPlot {
         float priceSize = widget ? (compact ? 16 : 20) : 19;
         paint.setTextSize(priceSize);
         float priceRight = x1 - 2;
-        float bookEnd = x1 - Math.max(paint.measureText(format(high)),paint.measureText(format(low))) - 10;
-        if (!widget) x1 = bookEnd;
+        // Keep price labels in a separate column beyond the closing grid line.
+        x1 -= Math.max(paint.measureText(format(high)),paint.measureText(format(low))) + 10;
         float width = x1 - x0;
         double tick = priceTick(height,priceSize);
         int gray = Math.max(84, Math.min(116, ((grid >> 8) & 255) + 36));
@@ -360,7 +362,7 @@ final class PhoneMarketPlot {
             c.drawLine(x0,y,x1,y,paint);
         }
         paint.setPathEffect(null);
-        drawDepth(c, x0, bookEnd, y1, height, rise, fall, widget);
+        drawDepth(c, x0, x1, y1, height, rise, fall, widget);
         Candle last = bars.get(bars.size() - 1);
         if (intraday) drawTrace(c, x0, width, y1, height, widget ? 0xffffffff : text, widget);
         else drawCandles(c, x0, width, y1, height, rise, fall, widget);
@@ -370,7 +372,6 @@ final class PhoneMarketPlot {
         for (int i=0; i<tickCount; i++) {
             double p = first + i*tick;
             float y = priceY(p,y1,height);
-            if (widget && nearRightSignal(x0,width,bookEnd-5,y1,height,y,priceSize)) continue;
             outlinedNumber(c,format(p),priceRight,y-(paint.ascent()+paint.descent())*.5f,PRICE_INK);
         }
         for (Fill f : fills) {
@@ -383,13 +384,15 @@ final class PhoneMarketPlot {
         if (sessionAxis) {
             sessionTimes(c, x0, x1, bottom, timeText, text, widget);
         } else {
-            caption(c, bars.get(0).minute.substring(11), barX(0,x0,width), bottom - 6, timeText, text, Paint.Align.LEFT);
+            caption(c, axisLabel(bars.get(0)), barX(0,x0,width), bottom - 6, timeText, text, Paint.Align.LEFT);
             if (bars.size() > 5) {
                 float end = barX(bars.size()-1,x0,width);
-                caption(c, last.minute.substring(11), end, bottom - 6, timeText, text, Paint.Align.RIGHT);
+                caption(c, axisLabel(last), end, bottom - 6, timeText, text, Paint.Align.RIGHT);
             }
         }
     }
+
+    private String axisLabel(Candle bar) { return daily ? bar.minute.substring(0,10) : bar.minute.substring(11); }
 
     private void drawFillArrow(Canvas c, float x, float price, boolean buy, int color, float top, float bottom) {
         float length = Math.min(24, (bottom - top) * .32f);
@@ -451,7 +454,7 @@ final class PhoneMarketPlot {
             }
             paint.setColor(TDW_INK);
             paint.setStrokeWidth(1.5f);
-            if (Float.isFinite(lastY) && bars.get(i - 1).slot + 1 == bar.slot)
+            if (Float.isFinite(lastY) && (daily || bars.get(i - 1).slot + 1 == bar.slot))
                 c.drawLine(lastX, lastY, x, y, paint);
             else c.drawCircle(x, y, 1.5f, paint);
             lastX = x;
@@ -535,14 +538,6 @@ final class PhoneMarketPlot {
         }
     }
 
-    private boolean nearRightSignal(float x0,float width,float start,float y1,float height,float y,float size) {
-        for (Fill fill : fills) {
-            if (barX(fill.index,x0,width) >= start && Math.abs(priceY(fill.price,y1,height)-y) < size*.65f+4)
-                return true;
-        }
-        return false;
-    }
-
     private void sessionTimes(Canvas c, float left, float right, float bottom, float size, int text, boolean widget) {
         caption(c, "09:30", left, bottom-6, size, text, Paint.Align.LEFT);
         if (right-left >= 640) {
@@ -557,8 +552,8 @@ final class PhoneMarketPlot {
     private void drawDayRange(Canvas c, float left, float top, float bottom, float size) {
         paint.setTextSize(size);
         paint.setTextAlign(Paint.Align.LEFT);
-        drawRangeLabel(c, dayHigh, left+3, top-paint.ascent());
-        drawRangeLabel(c, dayLow, left+3, bottom-paint.descent());
+        drawRangeLabel(c, daily ? high : dayHigh, left+3, top-paint.ascent());
+        drawRangeLabel(c, daily ? low : dayLow, left+3, bottom-paint.descent());
     }
 
     private void drawRangeLabel(Canvas c, double value, float x, float y) {
@@ -611,7 +606,7 @@ final class PhoneMarketPlot {
             float x = intraday ? x0+width*bar.slot/TRADING_MINUTES : barX(i,x0,width);
             float y = priceY(bar.average,y1,y1-y0);
             boolean sameSession = i>0 && bars.get(i-1).afternoon == bar.afternoon;
-            if (connected && previous+1==bar.slot && sameSession) path.lineTo(x,y);
+            if (connected && (daily || previous+1==bar.slot && sameSession)) path.lineTo(x,y);
             else {
                 path.moveTo(x,y);
                 c.drawCircle(x,y,stroke*.55f,paint);

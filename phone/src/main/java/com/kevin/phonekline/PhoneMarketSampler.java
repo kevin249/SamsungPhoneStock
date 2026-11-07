@@ -103,14 +103,37 @@ final class PhoneMarketSampler {
         }
     }
 
+    /** Count a failed batch once, and resume immediately when a newer request succeeds. */
+    static final class RetryBackoff {
+        private long deadline, failedThrough;
+        private int failures;
+
+        boolean allows(long now) { return now >= deadline; }
+
+        void failed(long now, long ticket, long issued, int code) {
+            if (ticket > failedThrough) {
+                failedThrough = issued;
+                failures = Math.min(5, failures + 1);
+                deadline = Math.max(deadline, now + (1000L << failures));
+            }
+            if (code == 401 || code == 403) deadline = Math.max(deadline, now + 60_000);
+            else if (code == 429) deadline = Math.max(deadline, now + 30_000);
+        }
+
+        void reset() {
+            deadline = failedThrough = 0;
+            failures = 0;
+        }
+    }
+
     final class Channel {
         final Counter sent=new Counter(), ok=new Counter();
         private final boolean book;
         private final ArrayDeque<PhoneMcpClient> idle=new ArrayDeque<>();
         private final List<PhoneMcpClient> pool=new ArrayList<>();
         private final PhoneRealtimeCandles.BookCache levels=new PhoneRealtimeCandles.BookCache();
-        private long sequence, completed, displayed, retryAt;
-        private int failures;
+        private long sequence, completed, displayed;
+        private final RetryBackoff retry = new RetryBackoff();
         private JSONObject pendingBook;
         private long pendingBookTicket, pendingBookReceivedAt;
         private boolean bookDeliveryQueued;
@@ -118,7 +141,7 @@ final class PhoneMarketSampler {
         Channel(boolean book) { this.book=book; }
 
         synchronized void dispatch(long now,boolean force,int requested) {
-            if (!active || now<retryAt) return;
+            if (!active || !retry.allows(now)) return;
             // At 5 Hz a two-second round trip occupies ten slots. Leave two for jitter.
             // A fast peer reuses idle clients; unplugging immediately lowers the ceiling.
             int limit = Math.min(MAX_IN_FLIGHT, 2 * Math.max(1, requested) + 2);
@@ -158,11 +181,9 @@ final class PhoneMarketSampler {
             if (ticket <= completed) { idle.addFirst(client); return; }
             completed=ticket;
             if (issue!=null && !(issue instanceof PhoneRealtimeCandles.DepthUnavailable)) {
-                failures=Math.min(5,failures+1);
                 int code=issue instanceof PhoneMcpClient.RpcError ? ((PhoneMcpClient.RpcError)issue).code : 0;
-                long delay=code==401 || code==403 ? 60_000 : code==429 ? 30_000 : 1000L<<failures;
-                retryAt=Math.max(retryAt,SystemClock.elapsedRealtime()+delay);
-            } else failures=0;
+                retry.failed(SystemClock.elapsedRealtime(), ticket, sequence, code);
+            } else retry.reset();
             if (book && issue==null) {
                 // Each depth result replaces the whole book. Retain only the newest
                 // complete snapshot while the UI is painting the previous one.

@@ -67,20 +67,26 @@ public final class PhoneDialActivity extends Activity {
     };
     private LinearLayout panel;
     private PhoneCandleView canvas;
+    private PhoneSystemDisplay previewDisplay;
+    private int settingsTab;
+    private LinearLayout settingsRoot;
     private TextView status;
-    private Button lockChoice, pluggedRate, unpluggedRate, pauseButton;
+    private Button pluggedRate, unpluggedRate, pauseButton;
     private Switch liveAod;
-    private Button schedulePermission;
+    private Button schedulePermission, backgroundPermission, batteryPermission;
+    private TextView livePowerStatus;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = getSharedPreferences("phone_dial", Context.MODE_PRIVATE);
+        if (!prefs.contains("first_chart_mode")) prefs.edit().putString("first_chart_mode",PhoneDisplayStocks.firstMode(prefs)).apply();
         symbol = StockSearch.normalize(prefs.getString("symbol", "sz000063"));
         if (symbol == null) symbol = "sz000063";
         lockTheme = LOCK_IDS[index(LOCK_IDS, prefs.getInt("lock_theme", PhoneCandleView.LOCK_BLACK), 0)];
         paused = prefs.getBoolean("paused", false);
         screen = state == null ? SETTINGS : state.getInt("screen", SETTINGS);
         if (screen != LOCK_PREVIEW && screen != DREAM_PREVIEW) screen = SETTINGS;
+        settingsTab=state==null?0:state.getInt("settings_tab",0);
         session = new PhoneQuoteSession(this::onQuote);
         samplingRate = new PhoneSamplingRate(this,prefs,hz -> {
             rate=hz;
@@ -139,6 +145,7 @@ public final class PhoneDialActivity extends Activity {
     }
 
     private void renderScreen() {
+        if (previewDisplay != null) { previewDisplay.close(); previewDisplay = null; }
         canvas = null;
         status = null;
         getWindow().setStatusBarColor(Color.BLACK);
@@ -149,12 +156,11 @@ public final class PhoneDialActivity extends Activity {
         if (screen == SETTINGS) {
             buildSettings();
         } else {
-            canvas = new PhoneCandleView(this);
-            canvas.setSurface(screen == LOCK_PREVIEW ? PhoneCandleView.Surface.LOCK : PhoneCandleView.Surface.DREAM);
-            canvas.setTheme(lockTheme);
-            canvas.setMarket(snapshot, symbol);
-            canvas.setRefreshState(rate, paused);
-            canvas.setFeedStatus(paused ? "已暂停" : feedStatus);
+            previewDisplay = new PhoneSystemDisplay(this,screen == LOCK_PREVIEW,() -> {
+                if (canvas != null) canvas.invalidate();
+            });
+            canvas = previewDisplay.view;
+            if (visible) previewDisplay.show();
             canvas.setOnClickListener(v -> openScreen(SETTINGS));
             setContentView(canvas);
         }
@@ -170,45 +176,197 @@ public final class PhoneDialActivity extends Activity {
         scroll.addView(panel);
         setContentView(scroll);
         line(label("手机行情", 29, INK));
-        status = label("", 14, MUTED);
-        status.setPadding(0, dp(6), 0, 0);
-        line(status);
-        updateStatus();
-
-        buildMarketSettings();
-        heading("三星息屏行情（AOD）");
-        addLiveControl();
-        line(button("添加到息屏显示", v -> showWidgetSetup()));
-        line(label("熄屏后，由三星息屏显示在系统时钟下方展示行情小组件。", 13, MUTED));
-
-        heading("锁屏动态壁纸");
-        lockChoice = button("共用主题 · " + lockName(), v -> chooseTheme());
-        line(lockChoice);
-        pair(button("预览锁屏", v -> openScreen(LOCK_PREVIEW)), button("设置系统壁纸", v -> {
-            if (!PhoneWallpaperService.openPicker(this)) toast("这台设备没有提供动态壁纸选择器");
-        }));
-        line(label("选择主题后，在系统壁纸预览中应用到锁屏。亮屏锁定时由系统显示时钟。", 13, MUTED));
-        heading("充电屏保");
-        pair(button("预览充电屏保", v -> openScreen(DREAM_PREVIEW)), button("充电屏保设置", v -> {
-            if (!PhoneMarketDreamService.openSettings(this)) toast("这台设备没有提供系统屏保设置入口");
-        }));
-        line(label("屏保沿用上方的锁屏主题，插电闲置至屏幕超时后显示行情和一个时钟。", 13, MUTED));
-        line(label("三星「日常程序」的充电规则会在插电时关闭 AOD，拔线后自动恢复。", 13, MUTED));
+        LinearLayout tabs = new LinearLayout(this);
+        String[] titles = {"显示","行情","后台"};
+        for (int i=0;i<titles.length;i++) {
+            final int tab=i;
+            Button item=button(titles[i],v -> { settingsTab=tab; renderScreen(); });
+            item.setBackgroundTintList(ColorStateList.valueOf(i==settingsTab ? 0xffa5efbc : 0xff242a27));
+            item.setTextColor(i==settingsTab ? 0xff102719 : INK);
+            tabs.addView(item,new LinearLayout.LayoutParams(0,-2,1));
+        }
+        line(tabs);
+        settingsRoot=panel;
+        liveAod=null; schedulePermission=null; backgroundPermission=null; batteryPermission=null; livePowerStatus=null;
+        if (settingsTab==0) {
+            beginCard();
+            String second=PhoneDisplayStocks.second(prefs);
+            LinearLayout stockHeading=new LinearLayout(this);
+            stockHeading.setGravity(Gravity.CENTER_VERTICAL);
+            stockHeading.addView(label("显示股票",20,INK),new LinearLayout.LayoutParams(0,-2,1));
+            stockHeading.addView(label(second.isEmpty()?"1 / 2":"2 / 2",15,MUTED));
+            line(stockHeading);
+            line(label("锁屏与充电屏保共用",13,MUTED));
+            stockRow(symbol,false);
+            line(label("上方图表周期",16,INK));
+            periodControl(false);
+            if (second.isEmpty()) line(button("＋ 添加第二只股票",v -> pickStock(true)));
+            else {
+                stockRow(second,true);
+                line(label("拖动左侧手柄或点击 ⇅ 调整上下顺序",12,MUTED));
+                line(label("下方图表周期",16,INK));
+                periodControl(true);
+            }
+            endCard();
+            beginCard();
+            line(label("显示主题",20,INK));
+            LinearLayout themes=new LinearLayout(this);
+            String[] themeNames={"纯黑","深灰","场景"};
+            for(int i=0;i<themeNames.length;i++) {
+                final int id=i;
+                boolean selected=i==0?lockTheme==PhoneCandleView.LOCK_BLACK:i==1?lockTheme==PhoneCandleView.LOCK_GRAPHITE:lockTheme<114;
+                Button item=button(themeNames[i],v -> {
+                    if (id==2) chooseTheme();
+                    else {
+                        lockTheme=id==0?PhoneCandleView.LOCK_BLACK:PhoneCandleView.LOCK_GRAPHITE;
+                        prefs.edit().putInt("lock_theme",lockTheme).apply(); renderScreen();
+                    }
+                });
+                item.setTextColor(selected?0xff102719:INK);
+                item.setBackgroundTintList(ColorStateList.valueOf(selected?0xffa5efbc:0xff343a36));
+                themes.addView(item,new LinearLayout.LayoutParams(0,-2,1));
+            }
+            line(themes);
+            endCard();
+            beginCard();
+            line(label("锁屏壁纸",20,INK));
+            pair(button("预览",v -> openScreen(LOCK_PREVIEW)),button("应用到锁屏",v -> {
+                if (!PhoneWallpaperService.openPicker(this)) toast("这台设备没有提供动态壁纸选择器");
+            }));
+            endCard();
+            beginCard();
+            line(label("充电屏保",20,INK));
+            pair(button("预览",v -> openScreen(DREAM_PREVIEW)),button("系统屏保设置",v -> {
+                if (!PhoneMarketDreamService.openSettings(this)) toast("这台设备没有提供系统屏保设置入口");
+            }));
+            endCard();
+            beginCard();
+            line(button("三星 AOD  ›",v -> { settingsTab=2; renderScreen(); }));
+            line(label("息屏小组件与持续更新 · 使用上方股票",13,MUTED));
+            endCard();
+        } else if (settingsTab==1) {
+            beginCard();
+            line(label("AOD 图表",20,INK));
+            addChartControls();
+            endCard();
+            beginCard();
+            line(label("行情获取间隔",20,INK));
+            addRateControls();
+            pauseButton=button(paused?"继续显示":"暂停显示",v -> togglePause());
+            pair(pauseButton,button("配置实时接口",v -> configureMcp()));
+            status=label("",13,MUTED); line(status); updateStatus();
+            endCard();
+        } else {
+            beginCard();
+            line(label("三星息屏行情（AOD）",20,INK));
+            addLiveControl();
+            line(button("添加到息屏显示",v -> showWidgetSetup()));
+            line(label("AOD 显示上方股票；锁屏壁纸与充电屏保支持上下两只。",13,MUTED));
+            endCard();
+        }
         panel.requestFocus();
     }
 
-    private void buildMarketSettings() {
-        heading("行情设置");
-        line(new PhoneStockPicker(this, symbol, this::changeSymbol));
-        addChartControls();
-        addRateControls();
-        pauseButton = button(paused ? "继续显示" : "暂停显示", v -> togglePause());
-        pair(pauseButton,button("配置实时接口", v -> configureMcp()));
+    private void beginCard() {
+        LinearLayout card=new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(14),dp(12),dp(14),dp(12));
+        android.graphics.drawable.GradientDrawable background=new android.graphics.drawable.GradientDrawable();
+        background.setColor(0xff202523); background.setCornerRadius(dp(14));
+        background.setStroke(dp(1),0xff343c37); card.setBackground(background);
+        LinearLayout.LayoutParams layout=new LinearLayout.LayoutParams(-1,-2); layout.topMargin=dp(12);
+        settingsRoot.addView(card,layout); panel=card;
+    }
+
+    private void endCard() { panel=settingsRoot; }
+
+    private String stockTitle(String code) {
+        try {
+            JSONObject cached = code.equals(symbol) && snapshot!=null ? snapshot
+                    : new JSONObject(prefs.getString("snapshot_"+code,"{}"));
+            String name=cached.optString("name",prefs.getString("stock_name_"+code,""));
+            return (name.isEmpty()?"股票行情":name)+"\n"+code.substring(2);
+        } catch (Exception invalid) { return code; }
+    }
+
+    private void stockRow(String code, boolean second) {
+        LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL);
+        Button order=button("⇅",v -> swapStocks());
+        order.setContentDescription("上下股票换位，也可拖动调整顺序");
+        order.setEnabled(!PhoneDisplayStocks.second(prefs).isEmpty());
+        final float[] start={0};
+        order.setOnTouchListener((v,event) -> {
+            if (event.getAction()==android.view.MotionEvent.ACTION_DOWN) {
+                start[0]=event.getRawY(); v.getParent().requestDisallowInterceptTouchEvent(true); return true;
+            }
+            if (event.getAction()==android.view.MotionEvent.ACTION_UP) {
+                v.getParent().requestDisallowInterceptTouchEvent(false);
+                if (Math.abs(event.getRawY()-start[0])>dp(24)) swapStocks(); else v.performClick();
+                return true;
+            }
+            if (event.getAction()==android.view.MotionEvent.ACTION_CANCEL) v.getParent().requestDisallowInterceptTouchEvent(false);
+            return true;
+        });
+        row.addView(order,new LinearLayout.LayoutParams(dp(48),dp(56)));
+        TextView title=label(stockTitle(code),16,INK); title.setPadding(dp(6),0,0,0);
+        row.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+        Button replace=button("更换",v -> pickStock(second)); replace.setContentDescription(second?"更换下方股票":"更换上方股票");
+        row.addView(replace,new LinearLayout.LayoutParams(dp(64),dp(56)));
+        if (!PhoneDisplayStocks.second(prefs).isEmpty()) {
+            Button remove=button("−",v -> {
+                if (!second) {
+                    prefs.edit().putString("first_chart_mode",PhoneDisplayStocks.mode(prefs)).apply();
+                    changeSymbol(PhoneDisplayStocks.second(prefs));
+                }
+                prefs.edit().remove("second_symbol").apply(); renderScreen();
+            });
+            remove.setContentDescription(second?"移除下方股票":"移除上方股票");
+            row.addView(remove,new LinearLayout.LayoutParams(dp(48),dp(56)));
+        }
+        line(row);
+    }
+
+    private void pickStock(boolean second) {
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle(second?"下方股票":"上方股票").setNegativeButton("取消",null).create();
+        PhoneStockPicker picker=new PhoneStockPicker(this,second?PhoneDisplayStocks.second(prefs):symbol,code -> {
+            String other=second?symbol:PhoneDisplayStocks.second(prefs);
+            if (code.equals(other)) { toast("两只股票不能重复"); return; }
+            if (second) prefs.edit().putString("second_symbol",code).apply(); else changeSymbol(code);
+            dialog.dismiss(); renderScreen();
+        });
+        picker.setPadding(dp(12),dp(12),dp(12),dp(12)); dialog.setView(picker); dialog.show();
+    }
+
+    private void swapStocks() {
+        String second=PhoneDisplayStocks.second(prefs);
+        if (second.isEmpty()) return;
+        String previous=symbol;
+        String upperMode=PhoneDisplayStocks.firstMode(prefs), lowerMode=PhoneDisplayStocks.mode(prefs);
+        prefs.edit().putString("first_chart_mode",lowerMode).putString("second_chart_mode",upperMode).apply();
+        changeSymbol(second);
+        prefs.edit().putString("second_symbol",previous).apply();
+        renderScreen();
+    }
+
+    private void periodControl(boolean second) {
+        String preference = second ? "second_chart_mode" : "first_chart_mode";
+        String current = second ? PhoneDisplayStocks.mode(prefs) : PhoneDisplayStocks.firstMode(prefs);
+        LinearLayout group=new LinearLayout(this);
+        String[] names={"实时","1min","1day"}, keys={"realtime","1m","1d"};
+        for(int i=0;i<keys.length;i++) {
+            final String mode=keys[i]; boolean selected=mode.equals(current);
+            Button choice=button(names[i],v -> { prefs.edit().putString(preference,mode).apply(); renderScreen(); });
+            choice.setContentDescription((second?"下方":"上方")+"图表周期 "+names[i]); choice.setSelected(selected);
+            choice.setTextColor(selected?0xff102719:INK);
+            choice.setBackgroundTintList(ColorStateList.valueOf(selected?0xffa5efbc:0xff343a36));
+            group.addView(choice,new LinearLayout.LayoutParams(0,-2,1));
+        }
+        line(group);
     }
 
     private void addLiveControl() {
         liveAod = new Switch(this);
-        liveAod.setText("盘中持续更新息屏行情");
+        liveAod.setText("持续更新息屏行情");
         liveAod.setTextColor(INK);
         liveAod.setMinHeight(dp(48));
         liveAod.setChecked(prefs.getBoolean("live_aod_enabled", false));
@@ -224,7 +382,7 @@ public final class PhoneDialActivity extends Activity {
             updateLiveControls();
         });
         line(liveAod);
-        line(label("交易时段按所选间隔请求逐笔成交与千档盘口。锁屏壁纸和充电屏保显示期间，休市时也按所选间隔获取盘口。", 13, MUTED));
+        line(label("盘中更新逐笔成交与千档盘口。AOD、锁屏壁纸和充电屏保显示期间，休市时也按所选间隔获取盘口。", 13, MUTED));
         schedulePermission = button("允许按开盘时间自动启动", v -> {
             if (android.os.Build.VERSION.SDK_INT >= 31 && !PhoneLiveSchedule.canSchedule(this)) {
                 try {
@@ -234,6 +392,23 @@ public final class PhoneDialActivity extends Activity {
             }
         });
         line(schedulePermission);
+        livePowerStatus = label("", 13, MUTED);
+        line(livePowerStatus);
+        backgroundPermission = button("解除后台运行限制", v -> {
+            toast("请在应用的电池设置中选择「不受限制」");
+            try {
+                startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName())));
+            } catch (ActivityNotFoundException unavailable) { toast("请在系统应用设置中允许后台运行"); }
+        });
+        line(backgroundPermission);
+        batteryPermission = button("允许未插电时持续更新", v -> {
+            try {
+                startActivity(new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:" + getPackageName())));
+            } catch (ActivityNotFoundException unavailable) { toast("请在系统电池设置中将本应用设为「不受限制」"); }
+        });
+        line(batteryPermission);
         updateLiveControls();
     }
 
@@ -242,6 +417,17 @@ public final class PhoneDialActivity extends Activity {
         if (liveAod != null && liveAod.isChecked() != enabled) liveAod.setChecked(enabled);
         if (schedulePermission != null) schedulePermission.setVisibility(enabled && !PhoneLiveSchedule.canSchedule(this)
                 ? View.VISIBLE : View.GONE);
+        boolean restricted = android.os.Build.VERSION.SDK_INT >= 28
+                && getSystemService(android.app.ActivityManager.class).isBackgroundRestricted();
+        boolean optimized = !getSystemService(android.os.PowerManager.class).isIgnoringBatteryOptimizations(getPackageName());
+        if (backgroundPermission != null) backgroundPermission.setVisibility(enabled && restricted ? View.VISIBLE : View.GONE);
+        if (batteryPermission != null) batteryPermission.setVisibility(enabled && optimized ? View.VISIBLE : View.GONE);
+        if (livePowerStatus != null) {
+            livePowerStatus.setVisibility(enabled && (restricted || optimized) ? View.VISIBLE : View.GONE);
+            livePowerStatus.setText(restricted
+                    ? "系统已限制后台运行，息屏行情可能停止更新。请解除后台限制。"
+                    : "电池优化可能在未插电息屏时暂停联网。允许持续更新后，息屏显示期间耗电会增加。");
+        }
     }
 
     private void addChartControls() {
@@ -327,8 +513,8 @@ public final class PhoneDialActivity extends Activity {
                 .setSingleChoiceItems(LOCK_NAMES, index(LOCK_IDS, lockTheme, 0), (dialog, which) -> {
                     lockTheme = LOCK_IDS[which];
                     prefs.edit().putInt("lock_theme", lockTheme).apply();
-                    lockChoice.setText("共用主题 · " + lockName());
                     dialog.dismiss();
+                    renderScreen();
                 }).setNegativeButton("取消", null).show();
     }
 
@@ -406,11 +592,11 @@ public final class PhoneDialActivity extends Activity {
             snapshot = data;
             dirty = true;
             PhoneMarketWidgetProvider.visibleQuote(this, data);
-            if (canvas != null) canvas.setMarket(data, symbol);
+
             if (SystemClock.elapsedRealtime() - lastSave >= 20_000) saveSnapshot();
         }
         feedStatus = message == null ? "" : message;
-        if (canvas != null) canvas.setFeedStatus(feedStatus);
+
         updateStatus();
     }
 
@@ -502,6 +688,7 @@ public final class PhoneDialActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         outState.putInt("screen", screen);
+        outState.putInt("settings_tab",settingsTab);
     }
     @Override protected void onResume() {
         super.onResume();
@@ -510,11 +697,13 @@ public final class PhoneDialActivity extends Activity {
         updateLiveControls();
         PhoneLiveSchedule.syncFromActivity(this);
         restartFeed();
+        if (previewDisplay!=null) previewDisplay.show();
         ui.removeCallbacks(showRates);
         ui.post(showRates);
     }
     @Override protected void onPause() {
         visible = false;
+        if (previewDisplay!=null) previewDisplay.hide();
         samplingRate.stop();
         ui.removeCallbacks(showRates);
         measuredRates = "";
@@ -524,6 +713,7 @@ public final class PhoneDialActivity extends Activity {
     }
     @Override protected void onDestroy() {
         session.close();
+        if (previewDisplay!=null) previewDisplay.close();
         super.onDestroy();
     }
 }

@@ -26,13 +26,15 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
             {42,855,1038,1590},{62,902,1018,1587}};
     private Context isolated;
     private SharedPreferences options;
-    private boolean checkConfiguredDepth, checkFiveHz, checkPowerRate;
+    private boolean checkConfiguredDepth, checkFiveHz, checkPowerRate, checkWidgetOnly, checkDaily;
 
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
+        checkDaily = arguments != null && "true".equals(arguments.getString("checkDaily"));
         checkConfiguredDepth = arguments != null && "true".equals(arguments.getString("checkConfiguredDepth"));
         checkFiveHz = arguments != null && "true".equals(arguments.getString("checkFiveHz"));
         checkPowerRate = arguments != null && "true".equals(arguments.getString("checkPowerRate"));
+        checkWidgetOnly = arguments != null && "true".equals(arguments.getString("checkWidgetOnly"));
         start();
     }
 
@@ -49,18 +51,25 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
                             return "phone_dial".equals(name) ? options : super.getSharedPreferences(name, mode);
                         }
                     };
-                    for (int i=0;i<themes.length;i++) check(i);
-                    for (int i=0;i<themes.length;i++) {
+                    for (int i=0; !checkWidgetOnly && i<themes.length; i++) check(i);
+                    for (int i=0; !checkWidgetOnly && i<themes.length; i++) {
                         if (themes[i] == PhoneCandleView.LOCK_BLACK || themes[i] == PhoneCandleView.LOCK_GRAPHITE)
                             PhoneChargingChartInstrumentation.check(isolated, options, themes[i], charts[i]);
                     }
+                    if (!checkWidgetOnly) PhoneDualChartInstrumentation.check(isolated,options);
                     PhoneWidgetInstrumentation.check(getTargetContext(), getContext());
                 }
                 catch (Exception | AssertionError failure) { result.putString("error", failure.toString()); }
                 finally { if (options != null) options.edit().clear().commit(); }
             });
             if (result.containsKey("error")) throw new AssertionError(result.getString("error"));
-            String depth = checkConfiguredDepth ? "\nConfigured depth: " + checkDepth() : "";
+            if (checkWidgetOnly) {
+                result.putString("stream", "PASS: widget geometry, depth, session axes, power sampling and host updates");
+                finish(Activity.RESULT_OK, result);
+                return;
+            }
+            String daily = checkDaily ? "\nDaily history: " + checkDailyHistory() : "";
+            String depth = daily + (checkConfiguredDepth ? "\nConfigured depth: " + checkDepth() : "");
             if (checkPowerRate) depth += "\nVisible lock/dream sampling policy: " + measureRequests(false);
             if (checkFiveHz) depth += "\nForced two-lane 5 Hz benchmark: " + measureRequests(true);
             result.putString("stream","PASS: clock-free lock wallpapers; shared charging themes with one clock; real-coordinate candle/fill/depth layers; empty-stock reset; clock-free RemoteViews on two host sizes, quote/range/axes, candle vs intraday, independent B/S and depth" + depth);
@@ -69,6 +78,28 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
             result.putString("stream","FAIL: "+failure);
             finish(Activity.RESULT_CANCELED,result);
         }
+    }
+
+    private String checkDailyHistory() throws Exception {
+        SharedPreferences preferences=getTargetContext().getSharedPreferences("phone_dial",Context.MODE_PRIVATE);
+        String code=preferences.getString("symbol","sz000063");
+        PhoneMarketClient market=new PhoneMarketClient();
+        JSONObject publicDaily;
+        try { publicDaily=market.fetchDaily(code); } finally { market.cancel(); }
+        if(publicDaily.getJSONArray("bars").length()<2 || !"1d".equals(publicDaily.optString("period")))
+            throw new AssertionError("Public daily history empty");
+        String result="public bars="+publicDaily.getJSONArray("bars").length()+" date="+publicDaily.getString("date");
+        String url=preferences.getString("mcp_url",""), key=PhoneSecretStore.load(preferences);
+        if(!url.isEmpty() && !key.isEmpty()) {
+            PhoneMcpClient remote=new PhoneMcpClient(url,key);
+            try {
+                JSONObject raw=remote.call("get_tdx_kline",PhoneMcpClient.arguments(code).put("period","1d")
+                        .put("dividend_type","none").put("days",240).put("limit",120));
+                JSONObject parsed=PhoneDailyCandles.history(code,"",raw.getJSONArray("bars"));
+                result+="; tdx bars="+parsed.getJSONArray("bars").length()+" date="+parsed.getString("date");
+            } finally { remote.cancel(); }
+        }
+        return result;
     }
 
     private String measureRequests(boolean benchmarkBoth) throws Exception {
@@ -208,7 +239,9 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
         view.setMarket(snapshot,"sz000001");
         Bitmap intraday=render(view);
         int[] highCorner={chart[0],chart[1],chart[0]+160,chart[1]+60};
-        int[] lowCorner={chart[0],chart[3]-96,chart[0]+160,chart[3]-39};
+        // The low label is at the main price plot bottom, above the existing TDW strip.
+        int priceBottom=Math.round(chart[3]-44-(chart[3]-44-chart[1]-15)*.26f-5);
+        int[] lowCorner={chart[0],priceBottom-40,chart[0]+160,priceBottom+4};
         if (changed(intraday,plain,highCorner)<8 || changed(intraday,plain,lowCorner)<8)
             throw new AssertionError("missing daily prices inside left chart corners "+theme);
         if (changed(intraday,plain,new int[]{0,0,1080,chart[1]})!=0)

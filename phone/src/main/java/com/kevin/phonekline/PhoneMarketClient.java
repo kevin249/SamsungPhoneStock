@@ -30,6 +30,33 @@ final class PhoneMarketClient {
         } catch (Exception unavailable) { if (primary == null) throw unavailable; return primary; }
     }
 
+    JSONObject fetchDaily(String symbol) throws Exception {
+        try {
+            String secid = (symbol.startsWith("sh") ? "1." : "0.") + symbol.substring(2);
+            JSONObject data = new JSONObject(get("https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55&ut=7eea3edcaed734bea9cbfc24409ed989&klt=101&fqt=0&secid=" + secid + "&beg=0&end=20500101&lmt=120", "https://quote.eastmoney.com/")).getJSONObject("data");
+            if (!symbol.substring(2).equals(data.optString("code"))) throw new IOException("标的不符");
+            JSONArray rows = data.getJSONArray("klines"), bars = new JSONArray();
+            for (int i=0;i<rows.length();i++) {
+                String[] v=rows.getString(i).split(",");
+                if (v.length>=5) bars.put(new JSONObject().put("time",v[0]).put("open",Double.parseDouble(v[1]))
+                        .put("close",Double.parseDouble(v[2])).put("high",Double.parseDouble(v[3])).put("low",Double.parseDouble(v[4])));
+            }
+            return PhoneDailyCandles.history(symbol,data.optString("name"),bars);
+        } catch (Exception unavailable) { if (cancelled) throw unavailable; }
+        String param=URLEncoder.encode(symbol+",day,,,120,",StandardCharsets.UTF_8.name());
+        JSONObject data=new JSONObject(get("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param="+param,"https://gu.qq.com/"))
+                .getJSONObject("data").getJSONObject(symbol);
+        JSONArray rows=data.getJSONArray("day"), bars=new JSONArray();
+        for (int i=0;i<rows.length();i++) {
+            JSONArray v=rows.getJSONArray(i);
+            bars.put(new JSONObject().put("time",v.getString(0)).put("open",v.getDouble(1)).put("close",v.getDouble(2))
+                    .put("high",v.getDouble(3)).put("low",v.getDouble(4)));
+        }
+        JSONObject qt=data.optJSONObject("qt");
+        JSONArray fields=qt==null?null:qt.optJSONArray(symbol);
+        return PhoneDailyCandles.history(symbol,fields==null?"":fields.optString(1),bars);
+    }
+
     private String get(String address, String referer) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(address).openConnection();
         connection = conn;

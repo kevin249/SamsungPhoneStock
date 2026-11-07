@@ -271,7 +271,8 @@ final class PhoneWidgetInstrumentation {
 
     private static boolean changedLabel(Bitmap a, Bitmap b, boolean top) {
         // This fixture has only afternoon prices, so its left corners contain only the overlaid labels.
-        int y0 = top ? 0 : a.getHeight() / 2;
+        // In a compact candle widget the TDW panel can put the low above the bitmap midpoint.
+        int y0 = 0;
         int y1 = top ? a.getHeight() / 2 : a.getHeight();
         int changed = 0;
         for (int y = y0; y < y1; y++) {
@@ -300,21 +301,24 @@ final class PhoneWidgetInstrumentation {
         int plotHeight = Math.round(plotWidth * full.getHeight() / (float)full.getWidth());
         AxisLabels axis = new AxisLabels(plotWidth);
         new PhoneChartOptions(prefs).buildWidget(tradingDay).drawWidget(axis, 0, 0, plotWidth, plotHeight);
-        require(Math.abs(axis.openX) <= plotWidth * .02 && axis.closeX >= plotWidth * .98,
-                "09:30 / 15:00 at opposite edges " + w + "x" + h);
+        require(axis.openX == 0 && Math.abs(axis.closeX - axis.gridRight) < 1 && axis.closeX < axis.priceLeft,
+                "15:00 ends at the grid before the price column " + w + "x" + h);
         require(axis.highX >= 0 && axis.highX <= plotWidth*.03 && axis.lowX >= 0 && axis.lowX <= plotWidth*.03
                 && axis.highY > 0 && axis.highY < axis.lowY && axis.lowY <= axis.timeY,
                 "daily numbers inside the plotting bounds " + w + "x" + h);
-        require(axis.quarterLines == 31 && axis.priceGrid && axis.rightPrice,
-                "trading hour grid and right-side price ticks " + w + "x" + h);
+        for (int i = 0; i <= 4; i++)
+            require(axis.gridLines.contains(Math.round(axis.closeX * i / 4)), "trading hour grid " + i);
+        require(axis.rightPrice, "right-side price ticks " + w + "x" + h);
 
         tradingDay.put("bars", withoutProbes);
         PhoneWidgetRenderer.render(context, ID, tradingDay, w, h).reapply(host, widget);
         Bitmap omitted = plot(widget);
         require(differsInBand(full, omitted, 0, .025), "opening price under left corner labels");
-        require(differsInBand(full, omitted, .235, .265), "10:30 price at one-quarter session");
-        require(differsInBand(full, omitted, .485, .515), "afternoon open at half session");
-        require(!differsInBand(full, omitted, .30, .45) && !differsInBand(full, omitted, .60, .95),
+        float plotFraction = axis.gridRight / plotWidth;
+        require(differsInBand(full, omitted, .235 * plotFraction, .265 * plotFraction), "10:30 price at one-quarter session");
+        require(differsInBand(full, omitted, .485 * plotFraction, .515 * plotFraction), "afternoon open at half session");
+        require(!differsInBand(full, omitted, .30 * plotFraction, .45 * plotFraction)
+                && !differsInBand(full, omitted, .60 * plotFraction, .95 * plotFraction),
                 "removing three timestamps must not slide the other prices");
     }
 
@@ -334,8 +338,9 @@ final class PhoneWidgetInstrumentation {
 
     private static final class AxisLabels extends Canvas {
         final int width;
-        int quarterLines;
-        boolean priceGrid, rightPrice;
+        final java.util.Set<Integer> gridLines = new java.util.HashSet<>();
+        float gridRight = Float.NaN, priceLeft = Float.POSITIVE_INFINITY;
+        boolean rightPrice;
         float shortDepth = Float.POSITIVE_INFINITY, longDepth;
         float openX = Float.NaN, closeX = Float.NaN, timeY = Float.NaN;
         float highX = Float.NaN, lowX = Float.NaN, highY = Float.NaN, lowY = Float.NaN;
@@ -347,12 +352,12 @@ final class PhoneWidgetInstrumentation {
             boolean neutral = Math.abs(Color.red(color)-Color.green(color)) <= 24
                     && Math.abs(Color.blue(color)-Color.green(color)) <= 24;
             if (neutral && x0 == x1 && Math.abs(y1-y0) > 10) {
-                int quarter = Math.round(4*x0/width);
-                if (quarter >= 0 && quarter <= 4 && Math.abs(x0 - width*quarter/4f) <= width*.01f)
-                    quarterLines |= 1 << quarter;
+                gridLines.add(Math.round(x0));
             }
-            if (neutral && y0 == y1 && Math.abs(x1-x0) >= width*.55f) priceGrid = true;
-            if (!neutral && y0 == y1 && x1 > width*.55f && x1 > x0) {
+            if (neutral && y0 == y1 && Math.abs(x1-x0) >= width*.55f) gridRight = x1;
+            if (((color & 0xffffff) == (PhoneMarketPlot.WIDGET_UP & 0xffffff)
+                    || (color & 0xffffff) == (PhoneMarketPlot.WIDGET_DOWN & 0xffffff))
+                    && y0 == y1 && x1 > width*.55f && x1 > x0) {
                 shortDepth = Math.min(shortDepth, x1-x0);
                 longDepth = Math.max(longDepth, x1-x0);
             }
@@ -363,8 +368,10 @@ final class PhoneWidgetInstrumentation {
             if ("15:00".equals(text) && paint.getTextAlign() == Paint.Align.RIGHT) closeX = x;
             if ("38.71".equals(text) && paint.getTextAlign() == Paint.Align.LEFT) { highX = x; highY = y; }
             if ("32.17".equals(text) && paint.getTextAlign() == Paint.Align.LEFT) { lowX = x; lowY = y; }
-            if (paint.getTextAlign() == Paint.Align.RIGHT && x >= width*.95f && text.matches("[0-9]+\\.[0-9]{2}"))
+            if (paint.getTextAlign() == Paint.Align.RIGHT && x >= width*.95f && text.matches("[0-9]+\\.[0-9]{2}")) {
                 rightPrice = true;
+                priceLeft = Math.min(priceLeft, x - paint.measureText(text));
+            }
         }
     }
 

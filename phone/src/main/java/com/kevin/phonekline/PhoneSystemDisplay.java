@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import org.json.JSONException;
 import org.json.JSONObject;
 import java.io.PrintWriter;
 
@@ -14,7 +13,8 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
     final PhoneCandleView view;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final SharedPreferences prefs;
-    private final PhoneQuoteSession feed;
+    private final PhoneDisplayFeed feed;
+    private final PhoneDisplayFeed lowerFeed;
     private final Runnable paint;
     private final Runnable refresh = this::configure;
     private final Runnable frame = this::drawFrame;
@@ -30,18 +30,24 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
         this.paint = paint;
         view = new PhoneCandleView(context);
         view.setSurface(wallpaper ? PhoneCandleView.Surface.LOCK : PhoneCandleView.Surface.DREAM);
-        feed = new PhoneQuoteSession((snapshot, status) -> {
+        feed = new PhoneDisplayFeed(prefs,(snapshot, status) -> {
             if (!active) return;
             view.setFeedStatus(status);
             if (snapshot != null && snapshot != shownQuote && symbol.equals(snapshot.optString("symbol"))) {
                 shownQuote = snapshot;
                 view.setMarket(snapshot, symbol);
-                PhoneMarketWidgetProvider.visibleQuote(context, snapshot);
+
             }
+            requestFrame();
+        }, snapshot -> PhoneMarketWidgetProvider.visibleQuote(context,snapshot));
+        lowerFeed = new PhoneDisplayFeed(prefs,(snapshot,status) -> {
+            if (!active) return;
+            view.setLowerMarket(snapshot,PhoneDisplayStocks.second(prefs),status);
             requestFrame();
         });
         rates=new PhoneSamplingRate(context,prefs,hz -> {
             feed.setRate(hz);
+            lowerFeed.setRate(hz);
             view.setRefreshState(hz,prefs.getBoolean("paused",false));
             requestFrame();
         });
@@ -66,13 +72,14 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
         handler.removeCallbacks(frame);
         frameDue = Long.MAX_VALUE;
         feed.stop();
+        lowerFeed.stop();
     }
 
     void close() {
         if (closed) return;
         hide();
         closed = true;
-        feed.close();
+        feed.stop();
     }
 
     @Override public void onSharedPreferenceChanged(SharedPreferences changed, String key) {
@@ -86,7 +93,8 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
             requestFrame();
         }
         if (key == null || "symbol".equals(key) || "paused".equals(key)
-                || "mcp_url".equals(key) || "mcp_key_iv".equals(key) || "mcp_key_cipher".equals(key)) {
+                || "first_chart_mode".equals(key) || "chart_mode".equals(key) || "second_symbol".equals(key) || "second_chart_mode".equals(key)
+                || "show_depth".equals(key) || "show_signals".equals(key) || "mcp_url".equals(key) || "mcp_key_iv".equals(key) || "mcp_key_cipher".equals(key)) {
             handler.removeCallbacks(refresh);
             handler.post(refresh);
         }
@@ -100,31 +108,13 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
         if (!active) return;
         symbol = prefs.getString("symbol", "sz000063");
         int rate = rates.current();
-        boolean paused = prefs.getBoolean("paused", false);
-        JSONObject restored = cachedCandles();
-        shownQuote = restored;
-        view.setRefreshState(rate, paused);
-        view.setMarket(restored, symbol);
-        view.setFeedStatus(paused ? "已暂停" : "等待行情");
-        if (paused) {
-            feed.stop();
-        } else {
-            String url = prefs.getString("mcp_url", "");
-            feed.startDisplay(symbol, url, url.isEmpty() ? "" : PhoneSecretStore.load(prefs), rate, restored);
-        }
+        view.setRefreshState(rate,prefs.getBoolean("paused",false));
+        view.setUpperPeriod(PhoneDisplayStocks.firstMode(prefs));
+        feed.start(symbol,PhoneDisplayStocks.firstMode(prefs),rate);
+        String second = PhoneDisplayStocks.second(prefs);
+        if (second.isEmpty()) view.setLowerMarket(null,"","");
+        lowerFeed.start(second,PhoneDisplayStocks.mode(prefs),rate);
         requestFrame();
-    }
-
-    private JSONObject cachedCandles() {
-        try {
-            JSONObject restored = new JSONObject(prefs.getString("snapshot_" + symbol, "{}"));
-            if (!symbol.equals(restored.optString("symbol"))) return null;
-            restored.remove("book");
-            restored.remove("fills");
-            return restored;
-        } catch (JSONException invalidCache) {
-            return null;
-        }
     }
 
     private void requestFrame() {
