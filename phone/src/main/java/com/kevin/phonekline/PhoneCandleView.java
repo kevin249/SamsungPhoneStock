@@ -69,7 +69,7 @@ final class PhoneCandleView extends View {
     PhoneCandleView(Context context) {
         super(context);
         preferences = context.getSharedPreferences("phone_dial", Context.MODE_PRIVATE);
-        chartOptions = new PhoneChartOptions(preferences);
+        chartOptions = readChartOptions();
         plot = chartOptions.build(null);
         overlayStatus = chartOptions.overlays(plot);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
@@ -98,6 +98,11 @@ final class PhoneCandleView extends View {
     void setSurface(Surface target) {
         if (surface == target) return;
         surface = target;
+        refreshChartOptions();
+        if (lower != null) {
+            lower.setSurface(target);
+            updateDescription();
+        }
         shownMinute = Long.MIN_VALUE;
         invalidate();
     }
@@ -150,7 +155,7 @@ final class PhoneCandleView extends View {
         marketDescription = name + " " + symbol + "，现价 " + price + "，涨跌 " + change
                 + "，当日最高价 " + PhoneMarketPlot.format(positive(snapshot, "high"))
                 + "，当日最低价 " + PhoneMarketPlot.format(positive(snapshot, "low"))
-                + "，" + chartOptions.legend(plot) + "，" + overlayStatus;
+                + "，" + chartOptions.legend(plot) + (overlayStatus.isEmpty() ? "" : "，" + overlayStatus);
         updateDescription();
         invalidate();
     }
@@ -166,11 +171,15 @@ final class PhoneCandleView extends View {
     }
 
     void refreshChartOptions() {
-        PhoneChartOptions next = periodOverride == null ? new PhoneChartOptions(preferences)
-                : new PhoneChartOptions(preferences, periodOverride);
+        PhoneChartOptions next = readChartOptions();
         if (chartOptions.matches(next)) return;
         chartOptions = next;
         setMarket(marketSnapshot, selectedSymbol);
+    }
+
+    private PhoneChartOptions readChartOptions() {
+        String period = periodOverride == null ? preferences.getString("chart_mode", "1m") : periodOverride;
+        return new PhoneChartOptions(preferences, period, surface == Surface.LOCK);
     }
 
     private static double positive(JSONObject row, String key) {
@@ -343,10 +352,11 @@ final class PhoneCandleView extends View {
             lower = null;
         } else {
             if (lower == null) lower = new PhoneCandleView(getContext());
+            lower.setSurface(surface);
             lower.theme = theme;
             lower.setRefreshState(rate,paused);
             lower.periodOverride = PhoneDisplayStocks.mode(preferences);
-            lower.chartOptions = new PhoneChartOptions(preferences, lower.periodOverride);
+            lower.chartOptions = lower.readChartOptions();
             lower.setMarket(data,code);
             lower.setFeedStatus(status);
         }

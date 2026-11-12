@@ -28,8 +28,11 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
     private SharedPreferences options;
     private boolean checkConfiguredDepth, checkFiveHz, checkPowerRate, checkWidgetOnly, checkDaily;
 
+    private boolean checkDailyArrows;
+
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
+        checkDailyArrows = arguments != null && "true".equals(arguments.getString("checkDailyArrows"));
         checkDaily = arguments != null && "true".equals(arguments.getString("checkDaily"));
         checkConfiguredDepth = arguments != null && "true".equals(arguments.getString("checkConfiguredDepth"));
         checkFiveHz = arguments != null && "true".equals(arguments.getString("checkFiveHz"));
@@ -41,6 +44,12 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
     @Override public void onStart() {
         Bundle result = new Bundle();
         try {
+            if (checkDailyArrows) {
+                PhoneDailyArrowRegression.check(this);
+                result.putString("stream", "PASS: lock and AOD daily B/S hidden, both TDW arrows rendered, dream B/S visible");
+                finish(Activity.RESULT_OK, result);
+                return;
+            }
             runOnMainSync(() -> {
                 try {
                     options = getContext().getSharedPreferences("plot-options-test", Context.MODE_PRIVATE);

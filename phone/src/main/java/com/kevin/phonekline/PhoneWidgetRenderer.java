@@ -45,9 +45,12 @@ final class PhoneWidgetRenderer {
         String symbol = PhoneRealtimeCandles.normalize(prefs.getString("symbol", "sz000063"));
         if (symbol.isEmpty()) symbol = "sz000063";
         if (snapshot != null && !symbol.equals(PhoneRealtimeCandles.normalize(snapshot.optString("symbol")))) snapshot = null;
-        PhoneChartOptions chartOptions = new PhoneChartOptions(prefs);
+        String period = snapshot != null && "1d".equals(snapshot.optString("period"))
+                ? "1d" : prefs.getString("chart_mode", "1m");
+        PhoneChartOptions chartOptions = new PhoneChartOptions(prefs, period, true);
         PhoneMarketPlot plot = chartOptions.buildWidget(snapshot);
-        String chartDescription = chartOptions.legend(plot) + " · " + chartOptions.overlays(plot);
+        String overlays = chartOptions.overlays(plot);
+        String chartDescription = chartOptions.legend(plot) + (overlays.isEmpty() ? "" : " · " + overlays);
         String code = symbol.substring(2);
         String name = snapshot == null ? "" : snapshot.optString("name");
         if ("null".equals(name) || name.equals(code) || name.equals(symbol)) name = "";

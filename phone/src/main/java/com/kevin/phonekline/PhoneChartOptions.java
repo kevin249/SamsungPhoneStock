@@ -6,21 +6,24 @@ import org.json.JSONObject;
 /** The canvas and RemoteViews use identical chart and overlay settings. */
 final class PhoneChartOptions {
     final boolean intraday, signals, depth;
+    private final boolean dailySignalsHidden;
     final String period;
 
     PhoneChartOptions(SharedPreferences prefs) {
-        this(prefs, prefs.getString("chart_mode", "1m"));
+        this(prefs, prefs.getString("chart_mode", "1m"), false);
     }
 
-    PhoneChartOptions(SharedPreferences prefs, String period) {
+    PhoneChartOptions(SharedPreferences prefs, String period, boolean hideDailySignals) {
         this.period = period;
         intraday = "realtime".equals(period);
-        signals = prefs.getBoolean("show_signals", true);
+        dailySignalsHidden = hideDailySignals && "1d".equals(period);
+        signals = !dailySignalsHidden && prefs.getBoolean("show_signals", true);
         depth = prefs.getBoolean("show_depth", true);
     }
 
     boolean matches(PhoneChartOptions other) {
-        return period.equals(other.period) && intraday == other.intraday && signals == other.signals && depth == other.depth;
+        return period.equals(other.period) && signals == other.signals && depth == other.depth
+                && dailySignalsHidden == other.dailySignalsHidden;
     }
 
     PhoneMarketPlot build(JSONObject snapshot) {
@@ -45,6 +48,7 @@ final class PhoneChartOptions {
 
     String overlays(PhoneMarketPlot plot) {
         String book = depth ? plot.bookLabel() : "盘口已关";
+        if (dailySignalsHidden) return book;
         String marks = !signals ? "B/S 已关" : plot.hasSignals() ? "B/S" : "暂无 B/S";
         return book + " · " + marks;
     }
