@@ -46,7 +46,7 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
         try {
             if (checkDailyArrows) {
                 PhoneDailyArrowRegression.check(this);
-                result.putString("stream", "PASS: lock and AOD daily B/S hidden, both TDW arrows rendered, dream B/S visible");
+                result.putString("stream", "PASS: lock, AOD and dream daily B/S hidden, both TDW arrow colors rendered");
                 finish(Activity.RESULT_OK, result);
                 return;
             }

@@ -47,7 +47,7 @@ final class PhoneWidgetRenderer {
         if (snapshot != null && !symbol.equals(PhoneRealtimeCandles.normalize(snapshot.optString("symbol")))) snapshot = null;
         String period = snapshot != null && "1d".equals(snapshot.optString("period"))
                 ? "1d" : prefs.getString("chart_mode", "1m");
-        PhoneChartOptions chartOptions = new PhoneChartOptions(prefs, period, true);
+        PhoneChartOptions chartOptions = new PhoneChartOptions(prefs, period);
         PhoneMarketPlot plot = chartOptions.buildWidget(snapshot);
         String overlays = chartOptions.overlays(plot);
         String chartDescription = chartOptions.legend(plot) + (overlays.isEmpty() ? "" : " · " + overlays);

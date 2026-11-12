@@ -120,7 +120,7 @@ final class PhoneMarketPlot {
             Candle candle = reverse.get(i);
             candle.average = intraday ? averages.getOrDefault(candle.minute,Double.NaN) : movingAverage(reverse,i);
             hasAverage |= PhoneRealtimeCandles.positive(candle.average);
-            index.put(daily ? candle.minute.substring(0,10) : candle.minute, bars.size());
+            index.put(candle.minute, bars.size());
             bars.add(candle);
             low = Math.min(low, candle.low);
             high = Math.max(high, candle.high);
@@ -142,12 +142,12 @@ final class PhoneMarketPlot {
             low -= extra;
             high += extra;
         }
-        JSONArray trades = showSignals ? snapshot.optJSONArray("fills") : null;
+        JSONArray trades = showSignals && !daily ? snapshot.optJSONArray("fills") : null;
         for (int i = 0; trades != null && i < trades.length(); i++) {
             JSONObject trade = trades.optJSONObject(i);
             if (trade == null) continue;
             String fillTime = minute(trade.optString("bar_time", trade.optString("time")));
-            Integer position = index.get(daily && fillTime.length() >= 10 ? fillTime.substring(0,10) : fillTime);
+            Integer position = index.get(fillTime);
             String side = trade.optString("side");
             double price = trade.optDouble("price");
             if (position == null || !("B".equals(side) || "S".equals(side)) || !Double.isFinite(price)

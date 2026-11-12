@@ -40,19 +40,23 @@ final class PhoneDailyArrowRegression {
                 .putBoolean("auto_chart_switch", false).putString("daily_snapshot_" + symbol, marked.toString()).putBoolean("show_signals", true).commit();
         try {
             test.runOnMainSync(() -> {
-                require(new PhoneMarketPlot(marked).hasSignals(), "fixture contains drawable B/S");
-                PhoneCandleView lock = new PhoneCandleView(context);
-                lock.setTheme(PhoneCandleView.LOCK_BLACK);
-                lock.layout(0, 0, 1080, 2340);
-                lock.setMarket(marked, symbol);
-                Bitmap lockMarked = render(lock);
-                lock.setMarket(bare, symbol);
-                require(lockMarked.sameAs(render(lock)), "B/S change the lock daily chart");
-                require(hasBothArrowColors(lockMarked), "lock daily TDW arrows missing");
-                lock.setSurface(PhoneCandleView.Surface.DREAM);
-                require(lock.getContentDescription().toString().contains("暂无 B/S"), "dream overlay description");
-                lock.setMarket(marked, symbol);
-                require(lock.getContentDescription().toString().endsWith("B/S"), "dream daily B/S missing");
+                require(!new PhoneMarketPlot(marked).hasSignals(), "daily plot exposes B/S");
+                PhoneCandleView view = new PhoneCandleView(context);
+                view.setTheme(PhoneCandleView.LOCK_BLACK);
+                view.layout(0, 0, 1080, 2340);
+                for (PhoneCandleView.Surface surface : new PhoneCandleView.Surface[]{
+                        PhoneCandleView.Surface.LOCK, PhoneCandleView.Surface.DREAM}) {
+                    view.setSurface(surface);
+                    view.setMarket(marked, symbol);
+                    Bitmap withSignals = render(view);
+                    require(!view.getContentDescription().toString().contains("B/S"), surface + " daily B/S description");
+                    view.setMarket(bare, symbol);
+                    Bitmap withoutSignals = render(view);
+                    require(withSignals.sameAs(withoutSignals), "B/S change the daily chart on " + surface);
+                    require(hasBothArrowColors(withoutSignals), "daily TDW arrows missing on " + surface);
+                    withSignals.recycle();
+                    withoutSignals.recycle();
+                }
 
                 View aod = PhoneWidgetRenderer.render(context, 0, marked, 315, 285).apply(context, new FrameLayout(context));
                 Bitmap aodMarked = widgetPlot(aod);

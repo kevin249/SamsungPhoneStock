@@ -163,4 +163,15 @@ public final class PhoneMarketPlotTest {
         PhoneMarketPlot rolling = new PhoneMarketPlot(s,false,false,false);
         assertEquals(32,rolling.averageAt(0),.000001);
     }
+
+    @Test public void dailyHidesSignalsWhileMinuteChartsKeepThem() throws Exception {
+        JSONObject data = snapshot(new JSONArray().put(bar("10:30",35)))
+                .put("fills",new JSONArray().put(new JSONObject()
+                        .put("bar_time",DAY+" 10:30").put("side","B").put("price",35)));
+        assertTrue(new PhoneMarketPlot(data,false,true,true).hasSignals());
+        data.put("period","1d");
+        // The cached daily snapshot may still be drawn during a switch back to realtime.
+        assertFalse(new PhoneMarketPlot(data,true,true,true,true).hasSignals());
+    }
+
 }
