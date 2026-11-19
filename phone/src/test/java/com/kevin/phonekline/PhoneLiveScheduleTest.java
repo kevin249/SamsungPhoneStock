@@ -25,6 +25,19 @@ public class PhoneLiveScheduleTest {
         assertFalse(PhoneLiveSchedule.marketHours(friday.plusDays(1).atTime(10, 0)));
     }
 
+    @Test public void retryAnInterruptedSessionWithinItsScheduledWindow() {
+        assertEquals(friday.atTime(9, 35),
+                PhoneLiveSchedule.nextAlarm(friday.atTime(9, 30), false, true));
+        assertEquals(friday.atTime(13, 0),
+                PhoneLiveSchedule.nextAlarm(friday.atTime(11, 28), false, true));
+        assertEquals(friday.atTime(13, 0),
+                PhoneLiveSchedule.nextAlarm(friday.atTime(10, 0), false, false));
+        assertEquals(friday.plusDays(3).atTime(9, 30),
+                PhoneLiveSchedule.nextAlarm(friday.atTime(10, 0), true, true));
+        assertEquals(friday.plusDays(3).atTime(9, 30),
+                PhoneLiveSchedule.nextAlarm(friday.atTime(14, 58), false, true));
+    }
+
     @Test public void nextAlarmSkipsLunchAndWeekend() {
         assertEquals(friday.atTime(9, 30), PhoneLiveSchedule.nextStart(friday.atStartOfDay()));
         assertEquals(friday.atTime(13, 0), PhoneLiveSchedule.nextStart(friday.atTime(11, 30)));

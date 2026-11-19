@@ -7,7 +7,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
-import android.os.PowerManager;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.Looper;
@@ -39,6 +38,14 @@ public final class PhoneLiveSchedule extends BroadcastReceiver {
         return ambientDisplay(context) || inWindow(context);
     }
 
+    private static boolean canStartSession(Context context) {
+        return marketHours(PhoneRealtimeCandles.now()) && !PhoneLiveTradingDay.closed(context);
+    }
+
+    static boolean needsTradingDayCheck(Context context) {
+        return canStartSession(context) && !PhoneLiveTradingDay.confirmed(context);
+    }
+
     // A widget-only installation also needs the screen transition, without a visible Activity.
     private static void observeDisplay(Context context, boolean enabled) {
         if (!enabled) {
@@ -61,7 +68,7 @@ public final class PhoneLiveSchedule extends BroadcastReceiver {
     }
 
     static void syncFromDisplay(Context context) {
-        if (enabled(context) && ambientDisplay(context) && !PhoneLiveMarketService.isStreaming()) start(context);
+        if (enabled(context) && shouldStream(context) && !PhoneLiveMarketService.isStreaming()) start(context);
     }
 
     private static boolean weekday(LocalDate date) {
@@ -120,10 +127,15 @@ public final class PhoneLiveSchedule extends BroadcastReceiver {
             c.getSystemService(AlarmManager.class).cancel(intent(c));
             return;
         }
-        LocalDateTime now = PhoneRealtimeCandles.now(), next = nextStart(now);
-        if (PhoneLiveTradingDay.closed(c)) next = nextStart(now.toLocalDate().atTime(CLOSE));
-        else if (marketHours(now) && !PhoneLiveTradingDay.confirmed(c)) next = now.plusMinutes(5);
-        setAlarm(c, next);
+        boolean needsRetry = !PhoneLiveMarketService.isStreaming() || !PhoneLiveTradingDay.confirmed(c);
+        setAlarm(c, nextAlarm(PhoneRealtimeCandles.now(), PhoneLiveTradingDay.closed(c), needsRetry));
+    }
+
+    static LocalDateTime nextAlarm(LocalDateTime now, boolean closed, boolean needsRetry) {
+        if (closed) return nextStart(now.toLocalDate().atTime(CLOSE));
+        LocalDateTime retry = now.plusMinutes(5);
+        if (needsRetry && marketHours(now) && marketHours(retry)) return retry;
+        return nextStart(now);
     }
 
     static void disable(Context c) {
@@ -135,46 +147,31 @@ public final class PhoneLiveSchedule extends BroadcastReceiver {
 
     static void syncFromActivity(android.app.Activity activity) {
         armNext(activity);
-        syncFromDisplay(activity);
-        if (!enabled(activity) || !marketHours(PhoneRealtimeCandles.now())) return;
-        if (PhoneLiveTradingDay.confirmed(activity)) start(activity);
-        else PhoneLiveTradingDay.refresh(activity, () -> {
-            if (!enabled(activity) || !inWindow(activity)) return;
-            if (!activity.isFinishing() && !activity.isDestroyed() && activity.hasWindowFocus()) start(activity);
-            else setAlarm(activity, PhoneRealtimeCandles.now().plusSeconds(1));
-        });
+        if (!enabled(activity)) return;
+        if (needsTradingDayCheck(activity) || shouldStream(activity) && !PhoneLiveMarketService.isStreaming()) {
+            start(activity);
+        }
     }
 
     private static void start(Context c) {
         try { c.startForegroundService(new Intent(c, PhoneLiveMarketService.class)); }
         catch (IllegalStateException | SecurityException denied) {
             // A revoked permission or transient background-start restriction cannot start a data session.
-            if (enabled(c) && marketHours(PhoneRealtimeCandles.now())) setAlarm(c, PhoneRealtimeCandles.now().plusMinutes(5));
+            armNext(c);
         }
     }
 
     @Override public void onReceive(Context context, Intent message) {
         Context app = context.getApplicationContext();
         armNext(app);
-        syncFromDisplay(app);
-        if (!enabled(app) || !marketHours(PhoneRealtimeCandles.now())) return;
-        if (!WAKE.equals(message.getAction())) {
-            setAlarm(app, PhoneRealtimeCandles.now().plusSeconds(1));
+        if (!enabled(app)) return;
+        if (!canStartSession(app)) {
+            syncFromDisplay(app);
             return;
         }
-        if (inWindow(app)) { start(app); return; }
-        PendingResult pending = goAsync();
-        PowerManager.WakeLock lock = app.getSystemService(PowerManager.class)
-                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "phonekline:market-calendar");
-        lock.acquire(30_000);
-        PhoneLiveTradingDay.refresh(app, () -> {
-            try {
-                armNext(app);
-                if (enabled(app) && inWindow(app)) start(app);
-            } finally {
-                if (lock.isHeld()) lock.release();
-                pending.finish();
-            }
-        });
+        if (PhoneLiveMarketService.isStreaming() && !needsTradingDayCheck(app)) return;
+        // Use the exact alarm's foreground-start exemption before starting calendar I/O.
+        if (WAKE.equals(message.getAction())) start(app);
+        else setAlarm(app, PhoneRealtimeCandles.now().plusSeconds(1));
     }
 }

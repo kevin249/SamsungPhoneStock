@@ -26,6 +26,7 @@ public final class PhoneLiveMarketService extends Service {
     private static final int NOTIFICATION = 0x4b22;
     // LockStar receives the latest frame once per second. Network sampling has its own clock.
     private static final long FRAME_MS = 1_000L;
+    private static final long WAKE_TIMEOUT_MS = 120_000L;
     private static boolean streaming;
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -48,6 +49,7 @@ public final class PhoneLiveMarketService extends Service {
     private JSONObject pending, received;
     private long nextFrame;
     private long submittedFrames, lastSubmittedAt;
+    private boolean checkingDay, stopping;
 
     static boolean isStreaming() { return streaming; }
 
@@ -72,44 +74,71 @@ public final class PhoneLiveMarketService extends Service {
                 startForeground(NOTIFICATION, notice());
             }
         } catch (IllegalStateException | SecurityException unavailable) {
+            stopping = true;
             stopSelf();
             return START_NOT_STICKY;
         }
         if (intent != null && DISABLE.equals(intent.getAction())) {
+            stopping = true;
             PhoneLiveSchedule.disable(this);
             stopSelf();
             return START_NOT_STICKY;
         }
+        stopping = false;
         PhoneLiveSchedule.armNext(this);
         checkWindow();
-        return streaming ? START_STICKY : START_NOT_STICKY;
+        return stopping ? START_NOT_STICKY : START_STICKY;
     }
 
     private void checkWindow() {
         main.removeCallbacks(guard);
+        if (stopping) return;
         boolean enabled = PhoneLiveSchedule.enabled(this);
-        if (!enabled || !PhoneLiveSchedule.shouldStream(this)) {
-            if (enabled) publishLatest();
-            detach();
-            stopSelf();
+        boolean streamNow = PhoneLiveSchedule.shouldStream(this);
+        boolean checkDay = enabled && PhoneLiveSchedule.needsTradingDayCheck(this);
+        if (!enabled || !streamNow && !checkDay) {
+            stopMarket(enabled);
             return;
         }
-        // Recheck at each whole minute and also in at most 30 s. A lost callback or
-        // interrupted service cannot leave the CPU lock held beyond its timeout.
+        // Leave room for delayed main-thread work while keeping a timeout if the service stalls.
+        wake.acquire(WAKE_TIMEOUT_MS);
+        if (checkDay && !checkingDay) {
+            checkingDay = true;
+            PhoneLiveTradingDay.refresh(this, () -> {
+                checkingDay = false;
+                if (stopping) return;
+                if (!PhoneLiveSchedule.shouldStream(this)) stopMarket(PhoneLiveSchedule.enabled(this));
+                else if (PhoneLiveSchedule.inWindow(this)) {
+                    PhoneLiveSchedule.armNext(this);
+                    checkWindow();
+                }
+            });
+        }
+        if (!streamNow) {
+            detach();
+            return;
+        }
         long checkIn = Math.min(30_000L, 60_050L - System.currentTimeMillis() % 60_000L);
-        wake.acquire(checkIn + 5_000L);
         main.postDelayed(guard, checkIn);
         if (session != null) return;
         String symbol = PhoneRealtimeCandles.normalize(prefs.getString("symbol", "sz000063"));
         if (symbol.isEmpty()) {
-            stopSelf();
+            stopMarket(false);
             return;
         }
         String address = prefs.getString("mcp_url", "");
         String key = address.isEmpty() ? "" : PhoneSecretStore.load(prefs);
         streaming = true;
+        PhoneLiveSchedule.armNext(this);
         session = new PhoneQuoteSession(this::onQuote);
         session.startDisplay(symbol, address, key, rates.current(), PhoneMarketWidgetProvider.latest(this));
+    }
+
+    private void stopMarket(boolean publish) {
+        stopping = true;
+        if (publish) publishLatest();
+        detach();
+        stopSelf();
     }
 
     private void onQuote(JSONObject quote, String status) {
@@ -158,6 +187,7 @@ public final class PhoneLiveMarketService extends Service {
     }
 
     @Override public void onDestroy() {
+        stopping = true;
         rates.stop();
         prefs.unregisterOnSharedPreferenceChangeListener(changed);
         publishLatest();
@@ -172,8 +202,11 @@ public final class PhoneLiveMarketService extends Service {
     @Override public IBinder onBind(Intent intent) { return null; }
 
     @Override protected void dump(FileDescriptor fd, PrintWriter out, String[] args) {
+        PowerManager power = getSystemService(PowerManager.class);
         out.println("streaming=" + streaming + " ambient=" + PhoneLiveSchedule.ambientDisplay(this)
-                + " rate_hz=" + rates.current() + " cpu_lock=" + wake.isHeld());
+                + " rate_hz=" + rates.current() + " cpu_lock=" + wake.isHeld()
+                + " checking_day=" + checkingDay + " idle=" + power.isDeviceIdleMode()
+                + " battery_exempt=" + power.isIgnoringBatteryOptimizations(getPackageName()));
         out.println("submitted_frames=" + submittedFrames + " last_submit_age_ms="
                 + (lastSubmittedAt == 0 ? -1 : SystemClock.elapsedRealtime() - lastSubmittedAt));
         if (session != null) {

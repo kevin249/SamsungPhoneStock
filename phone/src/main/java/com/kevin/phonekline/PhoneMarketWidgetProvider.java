@@ -1,12 +1,16 @@
 package com.kevin.phonekline;
 
+import android.app.KeyguardManager;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.hardware.display.DisplayManager;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.os.SystemClock;
+import android.view.Display;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -73,8 +77,17 @@ public final class PhoneMarketWidgetProvider extends AppWidgetProvider {
 
     private static void render(Context context, AppWidgetManager manager, int[] ids, JSONObject quote) {
         if (Boolean.TRUE.equals(wallpaperCoversWidget)) {
-            manager.updateAppWidget(ids, PhoneWidgetRenderer.wallpaperPlaceholder(context));
-            return;
+            // LockStar shares the same widget on lock screen and AOD. A wallpaper callback
+            // can arrive late during screen-off, so validate the cover before submitting it.
+            Display display = context.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
+            if (PhoneWallpaperService.shouldCoverWidget(true,
+                    context.getSystemService(PowerManager.class).isInteractive(),
+                    display == null ? Display.STATE_UNKNOWN : display.getState(),
+                    context.getSystemService(KeyguardManager.class).isKeyguardLocked())) {
+                manager.updateAppWidget(ids, PhoneWidgetRenderer.wallpaperPlaceholder(context));
+                return;
+            }
+            wallpaperCoversWidget = false;
         }
         for (int id : ids) {
             manager.updateAppWidget(id, PhoneWidgetRenderer.render(context, id, quote));
