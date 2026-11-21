@@ -24,14 +24,18 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
     private final int[][] charts = {{29,571,1051,909},{280,530,1033,742},{29,1494,1051,1744},
             {29,1508,1051,1744},{29,431,1051,741},{81,1090,999,1435},{81,1016,999,1361},
             {42,855,1038,1590},{62,902,1018,1587}};
+    private android.os.PowerManager.WakeLock testWake;
     private Context isolated;
     private SharedPreferences options;
-    private boolean checkConfiguredDepth, checkFiveHz, checkPowerRate, checkWidgetOnly, checkDaily;
-
+    private boolean checkConfiguredDepth, checkFiveHz, checkPowerRate, checkWidgetOnly, checkDaily, checkAutomatic, checkDisplayWindow, checkSignalPersistence, repairSignals;
     private boolean checkDailyArrows;
 
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
+        checkSignalPersistence = arguments != null && "true".equals(arguments.getString("checkSignalPersistence"));
+        repairSignals = arguments != null && "true".equals(arguments.getString("repairSignals"));
+        checkDisplayWindow = arguments != null && "true".equals(arguments.getString("checkDisplayWindow"));
+        checkAutomatic = arguments != null && "true".equals(arguments.getString("checkAutomatic"));
         checkDailyArrows = arguments != null && "true".equals(arguments.getString("checkDailyArrows"));
         checkDaily = arguments != null && "true".equals(arguments.getString("checkDaily"));
         checkConfiguredDepth = arguments != null && "true".equals(arguments.getString("checkConfiguredDepth"));
@@ -42,7 +46,24 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
     }
 
     @Override public void onStart() {
+        testWake=getTargetContext().getSystemService(android.os.PowerManager.class).newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK,"PhoneKline:Regression");
+        testWake.acquire(120000);
         Bundle result = new Bundle();
+        record("START automatic="+checkAutomatic+" widgetOnly="+checkWidgetOnly, false);
+        Thread watchdog=new Thread(()->{
+            try {
+                Thread.sleep(20000);
+                StringBuilder dump=new StringBuilder("WATCHDOG\n");
+                for(java.util.Map.Entry<Thread,StackTraceElement[]> entry:Thread.getAllStackTraces().entrySet()) {
+                    if(entry.getKey().getName().equals("main") || entry.getKey().getName().startsWith("Instr:")) {
+                        dump.append(entry.getKey().getName()).append(" ").append(entry.getKey().getState()).append("\n");
+                        for(StackTraceElement frame:entry.getValue()) dump.append(frame).append("\n");
+                    }
+                }
+                record(dump.toString(), true);
+            } catch(InterruptedException ignored) { }
+        },"RegressionWatchdog");
+        watchdog.setDaemon(true);watchdog.start();
         try {
             if (checkDailyArrows) {
                 PhoneDailyArrowRegression.check(this);
@@ -50,9 +71,27 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
                 finish(Activity.RESULT_OK, result);
                 return;
             }
+            if (checkSignalPersistence) {
+                PhoneSignalPersistenceRegression.check(this,repairSignals);
+                result.putString("stream","PASS: persistent B/S migration, empty updates, subscription restart, offline daily and AOD restoration");
+                finish(Activity.RESULT_OK,result);
+                return;
+            }
+            if (checkDisplayWindow) {
+                PhoneDisplayWindowRegression.check(this);
+                result.putString("stream", "PASS: unified power/surface schedule, manual/auto modes, lunch realtime, off-hours sockets stopped and resumed");
+                finish(Activity.RESULT_OK,result);
+                return;
+            }
+            if (checkAutomatic) {
+                PhoneAutomaticRegression.check(this);
+                result.putString("stream", "PASS: real-device timed lock transitions, AOD daily/realtime TDW, confirmed MCP B/S history and live feed");
+                finish(Activity.RESULT_OK,result);
+                return;
+            }
             runOnMainSync(() -> {
                 try {
-                    options = getContext().getSharedPreferences("plot-options-test", Context.MODE_PRIVATE);
+                    options = getTargetContext().getSharedPreferences("plot-options-test", Context.MODE_PRIVATE);
                     options.edit().clear().commit();
                     isolated = new ContextWrapper(getTargetContext()) {
                         @Override public Context getApplicationContext() { return this; }
@@ -87,6 +126,20 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
             result.putString("stream","FAIL: "+failure);
             finish(Activity.RESULT_CANCELED,result);
         }
+    }
+
+
+    void record(String message,boolean append) {
+        try(java.io.FileOutputStream out=getTargetContext().openFileOutput("regression-result.txt",
+                append?Context.MODE_APPEND:Context.MODE_PRIVATE)) {
+            out.write((message+"\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch(Exception ignored) { }
+    }
+
+    @Override public void finish(int code,Bundle results) {
+        record("FINISH "+code+" "+results.getString("stream",results.toString()),true);
+        if(testWake!=null&&testWake.isHeld())testWake.release();
+        super.finish(code,results);
     }
 
     private String checkDailyHistory() throws Exception {
@@ -200,6 +253,8 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
     }
 
     private void check(int i) throws Exception {
+        // Baseline comparisons below require identical artwork on lock and dream.
+        options.edit().putInt(PhoneCandleView.LOCK_BACKGROUND_LIFT,0).commit();
         int theme = themes[i];
         PhoneCandleView view = new PhoneCandleView(isolated);
         boolean ambient = theme==104 || theme==108;
@@ -228,6 +283,22 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
         }
         if ((ambient || theme == PhoneCandleView.LOCK_BLACK) && (before.getPixel(0,0) != Color.BLACK || before.getPixel(532,1129) != Color.BLACK))
             throw new AssertionError("OLED background "+theme);
+        options.edit().remove(PhoneCandleView.LOCK_BACKGROUND_LIFT).commit();
+        Bitmap lifted = render(view);
+        if (ambient ? changed(lifted,later,whole) != 0 : changed(lifted,later,whole) == 0)
+            throw new AssertionError("background lift must affect only lock wallpaper "+theme);
+        lifted.recycle();
+        if (!ambient) {
+            view.setSurface(PhoneCandleView.Surface.DREAM);
+            Bitmap defaultDream = render(view);
+            options.edit().putInt(PhoneCandleView.LOCK_BACKGROUND_LIFT,40).commit();
+            Bitmap brightLockDream = render(view);
+            if (changed(defaultDream,brightLockDream,whole) != 0)
+                throw new AssertionError("lock brightness leaked into charging dream "+theme);
+            defaultDream.recycle(); brightLockDream.recycle();
+            view.setSurface(PhoneCandleView.Surface.LOCK);
+        }
+        options.edit().putInt(PhoneCandleView.LOCK_BACKGROUND_LIFT,0).commit();
         before.recycle();
         view.setFrameTime(start);
         JSONArray levels = new JSONArray()

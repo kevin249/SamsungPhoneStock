@@ -144,7 +144,7 @@ final class PhoneMarketSampler {
             if (!active || !retry.allows(now)) return;
             // At 5 Hz a two-second round trip occupies ten slots. Leave two for jitter.
             // A fast peer reuses idle clients; unplugging immediately lowers the ceiling.
-            int limit = Math.min(MAX_IN_FLIGHT, 2 * Math.max(1, requested) + 2);
+            int limit = inFlightLimit(book, run, requested);
             if (pool.size() - idle.size() >= limit) return;
             PhoneMcpClient client=idle.pollFirst();
             if (client==null) {
@@ -229,5 +229,13 @@ final class PhoneMarketSampler {
             idle.clear();
             pendingBook=null;
         }
+    }
+
+    static int inFlightLimit(boolean book, Run run, int requested) {
+        // A slow thousand-level snapshot must finish before polling this symbol again.
+        // Two stocks otherwise multiply the outstanding full-depth requests against
+        // the same endpoint. Trade sampling and the explicit benchmark remain separate.
+        if (book && run != Run.BENCHMARK) return 1;
+        return Math.min(MAX_IN_FLIGHT, 2 * Math.max(1, requested) + 2);
     }
 }

@@ -19,7 +19,7 @@ final class PhoneDisplayFeed {
     private JSONObject daily, latest;
     private String symbol = "", mode = "", status = "等待行情", dailyStatus = "日 K 加载中";
     private int generation;
-    private boolean started, paused;
+    private boolean started, paused, cacheOnly, snapshotOnly;
     private String address = "", secret = "";
     private final java.util.function.Consumer<JSONObject> minuteObserver;
 
@@ -33,36 +33,48 @@ final class PhoneDisplayFeed {
         this.listener = listener;
         live = new PhoneQuoteSession((quote, message) -> {
             if (!symbol.equals(quote.optString("symbol"))) return;
-            latest = quote;
-            minuteObserver.accept(quote);
+            latest = PhoneSignalStore.accept(prefs,quote);
+            minuteObserver.accept(latest);
             status = message;
             emit();
         });
     }
 
-    void start(String symbol, String mode, int hz) {
+    void start(String symbol, String mode, int hz) { start(symbol, mode, hz, false); }
+
+    void start(String symbol, String mode, int hz, boolean snapshotOnly) {
+        start(symbol, mode, hz, snapshotOnly, false);
+    }
+
+    void start(String symbol, String mode, int hz, boolean snapshotOnly, boolean cacheOnly) {
         String url = prefs.getString("mcp_url", "");
         String key = url.isEmpty() ? "" : PhoneSecretStore.load(prefs);
         boolean nextPaused = prefs.getBoolean("paused",false);
         if (started && this.symbol.equals(symbol) && this.mode.equals(mode) && paused == nextPaused
-                && address.equals(url) && secret.equals(key)) {
+                && address.equals(url) && secret.equals(key) && this.cacheOnly == cacheOnly && this.snapshotOnly == snapshotOnly) {
             setRate(hz);
             emit();
             return;
         }
+        JSONObject retained = this.symbol.equals(symbol) ? latest : null;
         stop();
+        this.cacheOnly = cacheOnly;
+        this.snapshotOnly = snapshotOnly;
         started = true; paused = nextPaused; address = url; secret = key;
         this.symbol = symbol;
         this.mode = mode;
         if (symbol.isEmpty()) return;
-        status = prefs.getBoolean("paused",false) ? "已暂停" : "等待行情";
-        dailyStatus = "日 K 加载中";
-        latest = cached("snapshot_" + symbol);
+        PhoneSignalStore.migrate(prefs,symbol);
+        status = paused ? "已暂停" : cacheOnly ? "休市 · 已停止后台更新" : "等待行情";
+        dailyStatus = cacheOnly ? "" : "日 K 加载中";
+        latest = PhoneSignalStore.restore(prefs,retained != null ? retained : cached("snapshot_" + symbol));
         daily = "1d".equals(mode) ? cached("daily_snapshot_" + symbol) : null;
         emit();
-        if (prefs.getBoolean("paused",false)) return;
-        live.startDisplay(symbol,url,key,hz,latest);
-        if ("1d".equals(mode)) {
+        if (paused || cacheOnly) return;
+        if (snapshotOnly) live.startSnapshot(symbol,url,key,latest);
+        else live.startDisplay(symbol,url,key,hz,latest);
+        // Warm daily history during the trading session so the closing transition can stay offline.
+        {
             publicClient = new PhoneMarketClient();
             mcp = url.isEmpty() || key.isEmpty() ? null : new PhoneMcpClient(url,key);
             worker = new ScheduledThreadPoolExecutor(1);
@@ -74,7 +86,7 @@ final class PhoneDisplayFeed {
         try {
             JSONObject data = new JSONObject(prefs.getString(key,"{}"));
             if (!symbol.equals(data.optString("symbol"))) return null;
-            data.remove("book"); data.remove("fills");
+            data.remove("book");
             return data;
         } catch (Exception ignored) { return null; }
     }
@@ -103,7 +115,7 @@ final class PhoneDisplayFeed {
                     prefs.edit().putString("daily_snapshot_" + code,daily.toString()).apply();
                 } else dailyStatus = daily == null ? "日 K 暂不可用，正在重试" : "日 K 已缓存，正在重试";
                 emit();
-                if (!executor.isShutdown()) executor.schedule(() -> poll(token,code,market,remote,executor),
+                if ("1d".equals(mode) && !executor.isShutdown()) executor.schedule(() -> poll(token,code,market,remote,executor),
                         received == null ? 30 : 60,TimeUnit.SECONDS);
             });
         });
@@ -115,7 +127,7 @@ final class PhoneDisplayFeed {
             JSONObject data = "1d".equals(mode) ? PhoneDailyCandles.merge(daily,latest) : latest;
             if (data == null) data = new JSONObject().put("symbol",symbol).put("period",mode);
             String message = "1d".equals(mode) && !dailyStatus.isEmpty() ? status + " · " + dailyStatus : status;
-            listener.onUpdate(data,message);
+            listener.onUpdate(PhoneSignalStore.restore(prefs,data),message);
         } catch (Exception invalid) { listener.onUpdate(daily,"日 K 等待更新"); }
     }
 
@@ -130,7 +142,7 @@ final class PhoneDisplayFeed {
         if (latest != null && symbol.equals(latest.optString("symbol"))) {
             try {
                 JSONObject saved = PhoneRealtimeCandles.copy(latest);
-                saved.remove("book"); saved.remove("fills");
+                saved.remove("book");
                 prefs.edit().putString("snapshot_" + symbol,saved.toString()).apply();
             } catch (org.json.JSONException ignored) { }
         }

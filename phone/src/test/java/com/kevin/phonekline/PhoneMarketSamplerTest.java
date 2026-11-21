@@ -4,6 +4,15 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class PhoneMarketSamplerTest {
+    @Test public void normalDepthNeverStacksSlowRequestsAtAnySelectedRate() {
+        for (int hz : new int[]{1,2,5,10}) {
+            assertEquals(1,PhoneMarketSampler.inFlightLimit(true,PhoneMarketSampler.Run.NORMAL,hz));
+            assertEquals(1,PhoneMarketSampler.inFlightLimit(true,PhoneMarketSampler.Run.DISPLAY_PROBE,hz));
+            assertTrue(PhoneMarketSampler.inFlightLimit(false,PhoneMarketSampler.Run.NORMAL,hz)>1);
+        }
+        assertEquals(12,PhoneMarketSampler.inFlightLimit(true,PhoneMarketSampler.Run.BENCHMARK,5));
+    }
+
     @Test public void concurrentTimeoutsCountAsOneFailedBatch() {
         PhoneMarketSampler.RetryBackoff retry = new PhoneMarketSampler.RetryBackoff();
         for (int ticket = 1; ticket <= 12; ticket++) retry.failed(1000 + ticket * 10, ticket, 12, 0);

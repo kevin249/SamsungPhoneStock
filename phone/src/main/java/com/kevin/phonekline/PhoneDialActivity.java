@@ -3,25 +3,31 @@ package com.kevin.phonekline;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.BatteryManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -49,6 +55,13 @@ public final class PhoneDialActivity extends Activity {
     private int screen, lockTheme, rate = 2;
     private PhoneSamplingRate samplingRate;
     private boolean paused, visible, dirty;
+    private boolean plugged;
+    private final BroadcastReceiver previewPower = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0;
+            updatePreviewAwake();
+        }
+    };
     private long lastSave;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private String measuredRates = "";
@@ -145,6 +158,7 @@ public final class PhoneDialActivity extends Activity {
     }
 
     private void renderScreen() {
+        updatePreviewAwake();
         if (previewDisplay != null) { previewDisplay.close(); previewDisplay = null; }
         canvas = null;
         status = null;
@@ -198,14 +212,11 @@ public final class PhoneDialActivity extends Activity {
             line(stockHeading);
             line(label("锁屏与充电屏保共用",13,MUTED));
             stockRow(symbol,false);
-            line(label("上方图表周期",16,INK));
-            periodControl(false);
+            line(label("图表类型和自动切换开关在「行情」页设置，屏保、锁屏与 AOD 共用。",13,MUTED));
             if (second.isEmpty()) line(button("＋ 添加第二只股票",v -> pickStock(true)));
             else {
                 stockRow(second,true);
                 line(label("拖动左侧手柄或点击 ⇅ 调整上下顺序",12,MUTED));
-                line(label("下方图表周期",16,INK));
-                periodControl(true);
             }
             endCard();
             beginCard();
@@ -230,12 +241,30 @@ public final class PhoneDialActivity extends Activity {
             endCard();
             beginCard();
             line(label("锁屏壁纸",20,INK));
+            int lift = PhoneCandleView.lockBackgroundLift(prefs);
+            TextView liftLabel = label("背景提亮 · " + lift + "%",14,MUTED);
+            line(liftLabel);
+            SeekBar liftSlider = new SeekBar(this);
+            liftSlider.setMax(40);
+            liftSlider.setProgress(lift);
+            liftSlider.setContentDescription("锁屏背景提亮");
+            liftSlider.setMinimumHeight(dp(48));
+            liftSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar bar,int value,boolean fromUser) {
+                    liftLabel.setText("背景提亮 · " + value + "%");
+                    if (fromUser) prefs.edit().putInt(PhoneCandleView.LOCK_BACKGROUND_LIFT,value).apply();
+                }
+                @Override public void onStartTrackingTouch(SeekBar bar) { }
+                @Override public void onStopTrackingTouch(SeekBar bar) { }
+            });
+            panel.addView(liftSlider,new LinearLayout.LayoutParams(-1,dp(48)));
             pair(button("预览",v -> openScreen(LOCK_PREVIEW)),button("应用到锁屏",v -> {
                 if (!PhoneWallpaperService.openPicker(this)) toast("这台设备没有提供动态壁纸选择器");
             }));
             endCard();
             beginCard();
             line(label("充电屏保",20,INK));
+            line(label("插电预览保持显示；正式屏保请在系统设置中启用，等待屏幕自然超时进入。",13,MUTED));
             pair(button("预览",v -> openScreen(DREAM_PREVIEW)),button("系统屏保设置",v -> {
                 if (!PhoneMarketDreamService.openSettings(this)) toast("这台设备没有提供系统屏保设置入口");
             }));
@@ -246,7 +275,7 @@ public final class PhoneDialActivity extends Activity {
             endCard();
         } else if (settingsTab==1) {
             beginCard();
-            line(label("AOD 图表",20,INK));
+            line(label("图表显示",20,INK));
             addChartControls();
             endCard();
             beginCard();
@@ -318,7 +347,9 @@ public final class PhoneDialActivity extends Activity {
                     prefs.edit().putString("first_chart_mode",PhoneDisplayStocks.mode(prefs)).apply();
                     changeSymbol(PhoneDisplayStocks.second(prefs));
                 }
-                prefs.edit().remove("second_symbol").apply(); renderScreen();
+                prefs.edit().remove("second_symbol").apply();
+                PhoneMarketWidgetProvider.settingsChanged(this,false);
+                renderScreen();
             });
             remove.setContentDescription(second?"移除下方股票":"移除上方股票");
             row.addView(remove,new LinearLayout.LayoutParams(dp(48),dp(56)));
@@ -332,6 +363,7 @@ public final class PhoneDialActivity extends Activity {
             String other=second?symbol:PhoneDisplayStocks.second(prefs);
             if (code.equals(other)) { toast("两只股票不能重复"); return; }
             if (second) prefs.edit().putString("second_symbol",code).apply(); else changeSymbol(code);
+            PhoneMarketWidgetProvider.settingsChanged(this,false);
             dialog.dismiss(); renderScreen();
         });
         picker.setPadding(dp(12),dp(12),dp(12),dp(12)); dialog.setView(picker); dialog.show();
@@ -345,6 +377,7 @@ public final class PhoneDialActivity extends Activity {
         prefs.edit().putString("first_chart_mode",lowerMode).putString("second_chart_mode",upperMode).apply();
         changeSymbol(second);
         prefs.edit().putString("second_symbol",previous).apply();
+        PhoneMarketWidgetProvider.settingsChanged(this,false);
         renderScreen();
     }
 
@@ -382,7 +415,7 @@ public final class PhoneDialActivity extends Activity {
             updateLiveControls();
         });
         line(liveAod);
-        line(label("盘中更新逐笔成交与千档盘口。AOD、锁屏壁纸和充电屏保显示期间，休市时也按所选间隔获取盘口。", 13, MUTED));
+        line(label("09:15–15:00 持续更新（包含午休），其余时间自动停止后台请求，下一交易日恢复。图表类型与自动切换开关在「行情」页设置。", 13, MUTED));
         schedulePermission = button("允许按开盘时间自动启动", v -> {
             if (android.os.Build.VERSION.SDK_INT >= 31 && !PhoneLiveSchedule.canSchedule(this)) {
                 try {
@@ -431,19 +464,40 @@ public final class PhoneDialActivity extends Activity {
     }
 
     private void addChartControls() {
+        line(label("图表类型",16,INK));
         RadioGroup modes = new RadioGroup(this);
         modes.setOrientation(LinearLayout.HORIZONTAL);
-        modes.setContentDescription("行情图类型");
-        RadioButton candles = mode(modes, "1 分钟 K 线");
-        RadioButton realtime = mode(modes, "实时分时");
-        modes.check("realtime".equals(prefs.getString("chart_mode", "1m")) ? realtime.getId() : candles.getId());
-        modes.setOnCheckedChangeListener((group, id) -> {
-            prefs.edit().putString("chart_mode", id == realtime.getId() ? "realtime" : "1m").apply();
-            refreshCharts();
+        modes.setContentDescription("图表类型：实时、1min、1day");
+        RadioButton realtime = mode(modes,"实时");
+        RadioButton candles = mode(modes,"1min");
+        RadioButton daily = mode(modes,"1day");
+        PhoneDisplayWindow display = PhoneDisplayWindow.read(prefs);
+        modes.check("realtime".equals(display.manualMode) ? realtime.getId()
+                : "1d".equals(display.manualMode) ? daily.getId() : candles.getId());
+        modes.setOnCheckedChangeListener((group,id) -> {
+            prefs.edit().putString(PhoneDisplayWindow.MODE,id == realtime.getId() ? "realtime" : id == daily.getId() ? "1d" : "1m").apply();
+            displayOptionsChanged();
         });
         line(modes);
-        addOverlaySwitch("显示千档挂单", "show_depth");
+        Switch automatic = new Switch(this);
+        automatic.setText("自动切换实时 / 日 K");
+        automatic.setTextColor(INK);
+        automatic.setMinHeight(dp(48));
+        automatic.setChecked(display.automatic);
+        automatic.setOnCheckedChangeListener((view,enabled) -> {
+            prefs.edit().putBoolean(PhoneDisplayWindow.AUTOMATIC,enabled).apply();
+            displayOptionsChanged();
+        });
+        line(automatic);
+        line(label("开启：交易日 09:15–15:00 显示实时（含午休），其余时间显示日 K。关闭：始终使用上方图表类型。上海时间，屏保、锁屏与 AOD 共用，充电与未充电相同。",13,MUTED));
+        addOverlaySwitch("实时图显示千档挂单（日 K 隐藏）", "show_depth");
         addOverlaySwitch("显示 B/S 买卖标记", "show_signals");
+    }
+
+    private void displayOptionsChanged() {
+        refreshCharts();
+        PhoneMarketWidgetProvider.settingsChanged(this,false);
+        PhoneLiveSchedule.syncFromActivity(this);
     }
 
     private RadioButton mode(RadioGroup group, String title) {
@@ -560,14 +614,14 @@ public final class PhoneDialActivity extends Activity {
     }
 
     private void restoreSnapshot() {
+        PhoneSignalStore.migrate(prefs,symbol);
         snapshot = null;
         dirty = false;
         lastSave = 0;
         try {
             JSONObject saved = new JSONObject(prefs.getString("snapshot_" + symbol, "{}"));
             saved.remove("book");
-            saved.remove("fills");
-            if (symbol.equals(saved.optString("symbol"))) snapshot = saved;
+            if (symbol.equals(saved.optString("symbol"))) snapshot = PhoneSignalStore.restore(prefs,saved);
         } catch (org.json.JSONException ignored) { }
     }
 
@@ -576,7 +630,7 @@ public final class PhoneDialActivity extends Activity {
             JSONObject cached = new JSONObject();
             for (Iterator<String> keys = snapshot.keys(); keys.hasNext(); ) {
                 String key = keys.next();
-                if (!"book".equals(key) && !"fills".equals(key)) {
+                if (!"book".equals(key)) {
                     try { cached.put(key, snapshot.get(key)); } catch (JSONException invalid) { return; }
                 }
             }
@@ -588,6 +642,7 @@ public final class PhoneDialActivity extends Activity {
 
     private void onQuote(JSONObject data, String message) {
         if (!visible || paused) return;
+        data = PhoneSignalStore.accept(prefs,data);
         if (data != null && data != snapshot && symbol.equals(data.optString("symbol"))) {
             snapshot = data;
             dirty = true;
@@ -690,9 +745,21 @@ public final class PhoneDialActivity extends Activity {
         outState.putInt("screen", screen);
         outState.putInt("settings_tab",settingsTab);
     }
+    private void updatePreviewAwake() {
+        if (visible && plugged && screen == DREAM_PREVIEW)
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
     @Override protected void onResume() {
         super.onResume();
         visible = true;
+        IntentFilter batteryFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+        Intent battery = Build.VERSION.SDK_INT >= 33
+                ? registerReceiver(previewPower,batteryFilter,Context.RECEIVER_NOT_EXPORTED)
+                : registerReceiver(previewPower,batteryFilter);
+        plugged = battery != null && battery.getIntExtra(BatteryManager.EXTRA_PLUGGED,0) != 0;
+        updatePreviewAwake();
         samplingRate.start();
         updateLiveControls();
         PhoneLiveSchedule.syncFromActivity(this);
@@ -703,6 +770,8 @@ public final class PhoneDialActivity extends Activity {
     }
     @Override protected void onPause() {
         visible = false;
+        unregisterReceiver(previewPower);
+        updatePreviewAwake();
         if (previewDisplay!=null) previewDisplay.hide();
         samplingRate.stop();
         ui.removeCallbacks(showRates);

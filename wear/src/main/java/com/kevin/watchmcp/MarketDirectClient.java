@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -66,9 +67,26 @@ final class MarketDirectClient {
         return new JSONObject().put("time", stamp).put("open", open).put("close", close).put("high", highest).put("low", lowest).put("volume", Double.parseDouble(volume.toString()));
     }
 
-    JSONObject sessionBars(String symbol) throws Exception {
-        try { return eastmoney(symbol, "1m", 241); }
-        catch (Exception ignored) { return tencent(symbol, "1m", 241); }
+    JSONObject sessionBars(String symbol, LocalDateTime expected) throws Exception {
+        JSONObject primary = null;
+        String primaryStamp = "";
+        try {
+            primary = eastmoney(symbol, "1m", 241);
+            primaryStamp = lastBarStamp(primary);
+            if (expected == null || primaryStamp.compareTo(expected.toString()) >= 0) return primary;
+        } catch (Exception ignored) { }
+        try {
+            JSONObject secondary = tencent(symbol, "1m", 241);
+            return lastBarStamp(secondary).compareTo(primaryStamp) >= 0 ? secondary : primary;
+        } catch (Exception error) {
+            if (primary == null) throw error;
+            return primary;
+        }
+    }
+
+    private static String lastBarStamp(JSONObject chart) throws Exception {
+        JSONArray bars = chart.getJSONArray("bars");
+        return DialMarket.localStamp(bars.getJSONObject(bars.length() - 1).getString("time"));
     }
 
     private JSONObject eastmoney(String symbol, String period, int limit) throws Exception {

@@ -135,7 +135,7 @@ final class McpDirectClient {
     }
 
     private JSONObject clientInfo() throws Exception {
-        return new JSONObject().put("name", "SamsungWatchMCP").put("version", "0.6.6");
+        return new JSONObject().put("name", "SamsungWatchMCP").put("version", "0.6.7");
     }
 
     private JSONObject request(String method, JSONObject params, long id) throws Exception {

@@ -1,5 +1,7 @@
 package com.kevin.watchmcp;
 
+import com.kevin.market.TradingCalendar;
+
 import org.junit.Test;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
@@ -65,5 +67,24 @@ public class DialRefreshPolicyTest {
         assertEquals(30000,delay("2026-10-10T09:29:59",true,true));
         assertEquals(30000,delay("2026-11-04T10:00:00",false,true));
         assertEquals(30000,delay("2026-11-04T10:00:00",true,false));
+    }
+
+    @Test public void screenOffWakeTracksTheSessionAndNeverPollsDuringLunch() {
+        TradingCalendar.Day open = TradingCalendar.Day.OPEN;
+        LocalDateTime before = LocalDateTime.parse("2026-11-04T09:29:57");
+        LocalDateTime morning = before.plusMinutes(5);
+        LocalDateTime lunch = before.toLocalDate().atTime(12, 0);
+        assertEquals(3000, DialRefreshPolicy.screenOffWakeDelay(before, open, true));
+        assertEquals(30000, DialRefreshPolicy.screenOffWakeDelay(morning, open, true));
+        assertEquals(3600000, DialRefreshPolicy.screenOffWakeDelay(lunch, open, true));
+        assertEquals(1000, DialRefreshPolicy.screenOffWakeDelay(lunch.withHour(14).withMinute(59).withSecond(59), open, true));
+        long toNextCheck = java.time.Duration.between(lunch.withHour(15), lunch.plusDays(1).withHour(9).withMinute(29)).toMillis();
+        assertEquals(toNextCheck, DialRefreshPolicy.screenOffWakeDelay(lunch.withHour(15), open, true));
+        assertEquals(-1, DialRefreshPolicy.screenOffWakeDelay(morning, open, false));
+        assertEquals(300000, DialRefreshPolicy.screenOffWakeDelay(morning, TradingCalendar.Day.UNKNOWN, true));
+        assertEquals(3000, DialRefreshPolicy.screenOffWakeDelay(before.minusMinutes(1), TradingCalendar.Day.UNKNOWN, true));
+        assertEquals(toNextCheck, DialRefreshPolicy.screenOffWakeDelay(lunch.withHour(15), TradingCalendar.Day.CLOSED, true));
+        assertEquals(morning.withSecond(0), DialRefreshPolicy.latestCompletedMinute(morning, open));
+        assertEquals(lunch.withHour(11).withMinute(30), DialRefreshPolicy.latestCompletedMinute(lunch, open));
     }
 }

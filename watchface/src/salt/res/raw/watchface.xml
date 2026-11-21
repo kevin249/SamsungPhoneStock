@@ -18,12 +18,12 @@
             <Variant mode="AMBIENT" target="alpha" value="0"/>
             <Image resource="background"/>
         </PartImage>
-        <PartText x="60" y="22" width="220" height="28" alpha="255">
+        <PartText x="66" y="18" width="228" height="28" alpha="255">
             <Variant mode="AMBIENT" target="alpha" value="0"/>
-            <Text align="CENTER"><Font family="sans-serif" size="14" color="#343849"><Template>%s.%s　%s<Parameter expression="[MONTH_Z]"/><Parameter expression="[DAY_Z]"/><Parameter expression="[DAY_OF_WEEK_S]"/></Template></Font></Text>
+            <Text align="CENTER"><Font family="sans-serif" size="18" color="#343849"><Template>%s.%s%2s%s<Parameter expression="[MONTH_Z]"/><Parameter expression="[DAY_Z]"/><Parameter expression="&quot;&quot;"/><Parameter expression="[DAY_OF_WEEK_S]"/></Template></Font></Text>
         </PartText>
         <DigitalClock x="0" y="0" width="360" height="360">
-        <TimeText x="23" y="30" width="228" height="86" format="hh:mm" hourFormat="24" align="CENTER" alpha="255">
+        <TimeText x="66" y="40" width="228" height="86" format="hh:mm" hourFormat="24" align="CENTER" alpha="255">
             <Variant mode="AMBIENT" target="alpha" value="0"/>
             <Font family="sans-serif-light" size="62" color="#343849" />
         </TimeText>

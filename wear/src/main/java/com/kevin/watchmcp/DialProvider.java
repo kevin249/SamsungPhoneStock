@@ -45,9 +45,12 @@ public abstract class DialProvider extends ComplicationDataSourceService {
     }
     static void redraw(Context c) {
         for (Class<?> cls : PROVIDERS) {
-            if (!prefs(c).getStringSet(key(cls),java.util.Collections.emptySet()).isEmpty())
-                ComplicationDataSourceUpdateRequester.create(c,new ComponentName(c,cls)).requestUpdateAll();
+            redraw(c, cls);
         }
+    }
+    static void redraw(Context c, Class<?> cls) {
+        if (!prefs(c).getStringSet(key(cls),java.util.Collections.emptySet()).isEmpty())
+            ComplicationDataSourceUpdateRequester.create(c,new ComponentName(c,cls)).requestUpdateAll();
     }
     private static PlainComplicationText plain(String value) { return new PlainComplicationText.Builder(value).build(); }
     @Override public void onComplicationRequest(ComplicationRequest request, ComplicationRequestListener listener) {

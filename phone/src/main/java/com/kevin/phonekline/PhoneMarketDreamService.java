@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.provider.Settings;
 import android.service.dreams.DreamService;
+import android.view.WindowManager;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 
@@ -30,13 +31,21 @@ public final class PhoneMarketDreamService extends DreamService {
         super.onAttachedToWindow();
         setInteractive(false);
         setFullscreen(true);
-        setScreenBright(false);
+        // Dimming and keeping the dream alive are separate concerns. Disabling
+        // screenBright also removes KEEP_SCREEN_ON and permits idle dimming.
+        setScreenBright(true);
         display = new PhoneSystemDisplay(this, false, () -> display.view.invalidate());
         setContentView(display.view);
     }
 
     @Override public void onDreamingStarted() {
         super.onDreamingStarted();
+        // DreamService's window-attribute callback is a no-op, so submit the
+        // brightness to WindowManager explicitly once the decor is attached.
+        WindowManager.LayoutParams window = getWindow().getAttributes();
+        window.screenBrightness = 0.18f;
+        getWindow().setAttributes(window);
+        getWindow().getWindowManager().updateViewLayout(getWindow().getDecorView(),window);
         if (display != null) display.show();
     }
 

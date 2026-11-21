@@ -29,6 +29,11 @@ import java.util.Locale;
 final class PhoneCandleView extends View {
     enum Surface { LOCK, DREAM, AMBIENT }
     static final int LOCK_BLACK = 114, LOCK_GRAPHITE = 115;
+    static final String LOCK_BACKGROUND_LIFT = "lock_background_lift";
+
+    static int lockBackgroundLift(SharedPreferences prefs) {
+        return Math.max(0, Math.min(40, prefs.getInt(LOCK_BACKGROUND_LIFT, 20)));
+    }
     private static final float W = 1080, H = 2340;
     private static final Typeface SANS = Typeface.create("sans-serif", Typeface.NORMAL);
     private static final Typeface HEAVY = Typeface.create("sans-serif-black", Typeface.BOLD);
@@ -231,6 +236,10 @@ final class PhoneCandleView extends View {
             int dy = (int)Math.floorMod(shownMinute / 5, 5L) - 2;
             c.translate(dx * 2, dy * 2);
         }
+        // Lift only the wallpaper artwork/background, never the chart or AOD.
+        if (surface == Surface.LOCK) {
+            c.drawColor(Color.argb(Math.round(lockBackgroundLift(preferences) * 2.55f), 255, 255, 255));
+        }
         if (surface == Surface.AMBIENT) drawClock(c);
         if (surface == Surface.DREAM)
             label(c,hhmm,W/2,173,145,Color.WHITE,SANS,Paint.Align.CENTER,600);
@@ -339,14 +348,18 @@ final class PhoneCandleView extends View {
         footer(c,start+405,dim);
     }
     void setLowerMarket(JSONObject data, String code, String status) {
+        setLowerMarket(data, code, status, PhoneDisplayStocks.mode(preferences));
+    }
+
+    void setLowerMarket(JSONObject data, String code, String status, String period) {
         if (code == null || code.isEmpty()) {
             lower = null;
         } else {
             if (lower == null) lower = new PhoneCandleView(getContext());
             lower.theme = theme;
             lower.setRefreshState(rate,paused);
-            lower.periodOverride = PhoneDisplayStocks.mode(preferences);
-            lower.chartOptions = new PhoneChartOptions(preferences, lower.periodOverride);
+            lower.periodOverride = period;
+            lower.chartOptions = new PhoneChartOptions(preferences, period);
             lower.setMarket(data,code);
             lower.setFeedStatus(status);
         }

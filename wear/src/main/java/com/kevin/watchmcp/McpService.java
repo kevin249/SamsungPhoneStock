@@ -1,6 +1,9 @@
 package com.kevin.watchmcp;
 
+import com.kevin.market.TradingCalendar;
+
 import android.Manifest;
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -19,7 +22,9 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import org.json.JSONObject;
+import java.time.LocalDateTime;
 
 /** 用户开启的持续 MCP 订阅；屏幕关闭、Activity 销毁都不关闭服务。 */
 public final class McpService extends Service {
@@ -39,6 +44,13 @@ public final class McpService extends Service {
     private int generation;
     private boolean testMode;
     private SharedPreferences dialPrefs;
+    private AlarmManager dialAlarms;
+    private long scheduledWake;
+    private final Runnable dialTick = this::runDialTick;
+    private final AlarmManager.OnAlarmListener dialAlarm = () -> {
+        scheduledWake = 0;
+        runDialTick();
+    };
     private final SharedPreferences.OnSharedPreferenceChangeListener calendarChanges=(preferences,key) -> {
         if (DialCalendar.CACHE.equals(key)) {
             handler.removeCallbacks(this.dialTick);
@@ -47,23 +59,43 @@ public final class McpService extends Service {
     };
     private final BroadcastReceiver screenChanges = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
+            if (Intent.ACTION_SCREEN_ON.equals(intent.getAction()) && !testMode && DialProvider.active(context)) {
+                DialMarket.onTradingWake(context);
+                // 先提交熄屏期间备好的图，网络响应到达时再提交新的行情。
+                DialProvider.redraw(context);
+            }
             handler.removeCallbacks(dialTick);
             handler.post(dialTick);
         }
     };
-    private final Runnable dialTick = new Runnable() {
-        @Override public void run() {
-            boolean awake = getSystemService(PowerManager.class).isInteractive();
-            boolean active=DialProvider.active(McpService.this);
-            if (!testMode && active) {
-                DialMarket.refresh(McpService.this);
-                if (!awake) DialProvider.redraw(McpService.this);
+
+    private void runDialTick() {
+        if (dialAlarms == null) return;
+        handler.removeCallbacks(dialTick);
+        boolean awake = getSystemService(PowerManager.class).isInteractive();
+        boolean active = !testMode && !DialMarket.symbol(dialPrefs).isEmpty() && DialProvider.active(this);
+        if (active) DialMarket.refresh(this);
+        LocalDateTime now = LocalDateTime.now(DialMarket.SHANGHAI);
+        TradingCalendar.Day day = DialCalendar.day(dialPrefs, now.toLocalDate());
+        long wakeDelay = awake ? -1 : DialRefreshPolicy.screenOffWakeDelay(now, day, active);
+        long target = wakeDelay < 0 ? 0 : SystemClock.elapsedRealtime() + Math.max(1, wakeDelay);
+        if (target == 0 && scheduledWake != 0) {
+            dialAlarms.cancel(dialAlarm);
+            scheduledWake = 0;
+        } else if (target != 0 && Math.abs(target - scheduledWake) > 200) {
+            try {
+                dialAlarms.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, target, "WatchMcp:market", dialAlarm, handler);
+                scheduledWake = target;
+            } catch (SecurityException restricted) {
+                scheduledWake = 0;
+                android.util.Log.w("WatchDial", "系统限制熄屏唤醒，亮屏时继续刷新");
             }
-            java.time.LocalDateTime now=java.time.LocalDateTime.now(DialMarket.SHANGHAI);
-            handler.postDelayed(this,DialRefreshPolicy.tickDelayMillis(now,
-                    DialCalendar.day(dialPrefs,now.toLocalDate()),awake,active));
         }
-    };
+        // 休市按原有低频检查日历和行情，已预约的开盘唤醒与之独立。
+        if (scheduledWake == 0 || !DialRefreshPolicy.isTradingWindow(now, day)) {
+            handler.postDelayed(dialTick, DialRefreshPolicy.tickDelayMillis(now, day, awake, active));
+        }
+    }
 
     static void ensureRunning(Context context) {
         SharedPreferences prefs = context.getSharedPreferences("watch", MODE_PRIVATE);
@@ -78,6 +110,7 @@ public final class McpService extends Service {
         createChannels();
         processingLock = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WatchMcp:message-processing");
         processingLock.setReferenceCounted(false);
+        dialAlarms = getSystemService(AlarmManager.class);
         dialPrefs=getSharedPreferences("watch",MODE_PRIVATE);
         dialPrefs.registerOnSharedPreferenceChangeListener(calendarChanges);
         IntentFilter screens = new IntentFilter(Intent.ACTION_SCREEN_ON);
@@ -219,6 +252,8 @@ public final class McpService extends Service {
 
     @Override public void onDestroy() {
         generation++;
+        if (scheduledWake != 0) dialAlarms.cancel(dialAlarm);
+        dialAlarms = null;
         if (client != null) client.stop();
         if (networkPolicy != null) networkPolicy.close();
         unregisterReceiver(screenChanges);

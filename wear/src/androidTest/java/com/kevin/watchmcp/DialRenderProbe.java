@@ -82,6 +82,8 @@ final class DialRenderProbe {
             if (changed(with,without,315,10,68,123)<5) throw new AssertionError("missing order book");
             with.recycle(); without.recycle();
             checkLiveCandle();
+            checkOpeningAndLateHistory();
+            checkTdxSourceClock();
         } finally { prefs.edit().clear().commit(); }
     }
 
@@ -115,6 +117,68 @@ final class DialRenderProbe {
         quote.put("datetime","2026-11-04T13:00:01+08:00");
         DialMarket.applySnapshot(data,quote);
         if (data.getJSONArray("bars").getJSONArray(2).getInt(0)!=121) throw new AssertionError("afternoon boundary");
+    }
+
+    private static void checkOpeningAndLateHistory() throws Exception {
+        String code = "sz000001";
+        java.time.LocalDateTime now = java.time.LocalDateTime.parse("2026-11-05T09:35:10");
+        JSONObject quote = new JSONObject().put("datetime", now.toString()).put("symbol", code).put("last_price", 11);
+        JSONObject old = new JSONObject().put("symbol", code).put("name", "测试")
+                .put("date", "2026-11-04").put("time", "15:00").put("price", 10).put("book", new JSONObject())
+                .put("bars", new JSONArray("[[240,10,10,10,10]]"));
+        if (DialMarket.acceptQuote(old, quote, code, now, false))
+            throw new AssertionError("unconfirmed trading day seeded a chart");
+        if (!DialMarket.acceptQuote(old, quote, code, now, true) || !old.getString("time").equals("09:35")
+                || old.has("book") || old.getJSONArray("bars").length() != 1)
+            throw new AssertionError("opening quote waited for history or reused yesterday's data");
+        DialMarket.applySnapshot(old, quote.put("datetime", "2026-11-05T09:36:03").put("last_price", 12));
+        JSONObject history = new JSONObject().put("date", "2026-11-05").put("symbol", code)
+                .put("time", "09:32").put("price", 10).put("low", 10).put("high", 10)
+                .put("history_through", "2026-11-05T09:32").put("bars", new JSONArray("[[1,10,10,10,10],[2,10,10,10,10]]"));
+        if (!DialMarket.mergeHistory(history, old) || history.getJSONArray("bars").length() != 4
+                || history.getJSONArray("bars").getJSONArray(2).getInt(0) != 6
+                || !history.getString("time").equals("09:36") || history.getDouble("price") != 12)
+            throw new AssertionError("late history dropped live candles or rewound the price");
+        JSONObject yesterday = new JSONObject().put("date", "2026-11-04");
+        if (DialMarket.mergeHistory(yesterday, history)) throw new AssertionError("yesterday replaced today's chart");
+        JSONObject completed = new JSONObject().put("date", "2026-11-05").put("symbol", code)
+                .put("time", "09:37").put("price", 13).put("low", 10).put("high", 13)
+                .put("history_through", "2026-11-05T09:37").put("bars", new JSONArray("[[7,12,13,12,13]]"));
+        DialMarket.mergeHistory(completed, history);
+        if (DialMarket.applySnapshot(completed, quote) || !completed.getString("time").equals("09:37")
+                || completed.getDouble("price") != 13) throw new AssertionError("older quote rewound a completed candle");
+    }
+
+    private static void checkTdxSourceClock() throws Exception {
+        String code = "sh603986";
+        java.time.LocalDateTime now = java.time.LocalDateTime.parse("2026-11-05T09:35:10");
+        JSONObject data = new JSONObject();
+        JSONObject raw = new JSONObject().put("RefreshNum", "150000");
+        JSONObject quote = new JSONObject().put("datetime", now.toString()).put("raw", raw)
+                .put("symbol", code).put("last_price", 11);
+        if (DialMarket.acceptQuote(data, quote, code, now, true) || data.has("bars"))
+            throw new AssertionError("yesterday's closing quote seeded today's opening");
+        raw.put("RefreshNum", "93259");
+        if (DialMarket.acceptQuote(data, quote, code, now, true)) throw new AssertionError("legacy RefreshNum used as trade time");
+        raw.put("RefreshTime", "93259");
+        if (!DialMarket.acceptQuote(data, quote, code, now, true) || !data.getString("time").equals("09:32"))
+            throw new AssertionError("gateway read time was treated as the market time");
+        raw.put("RefreshTime", "113001");
+        quote.put("datetime", "2026-11-05T13:00:09");
+        if (!DialMarket.applySnapshot(data, quote) || !data.getString("time").equals("11:30")
+                || data.getJSONArray("bars").getJSONArray(1).getInt(0) != 120)
+            throw new AssertionError("morning close was plotted as an afternoon trade");
+        raw.put("RefreshTime", "130005");
+        if (!DialMarket.applySnapshot(data, quote) || !data.getString("quote_at").equals("2026-11-05T13:00:05"))
+            throw new AssertionError("live afternoon quote was dropped");
+        JSONObject tick = new JSONObject().put("source_at", "2026-11-05T13:02:55+08:00").put("price", 12.5);
+        JSONObject result = new JSONObject().put("symbol", "603986.SH").put("trades", new JSONArray().put(tick));
+        if (!DialMarket.applySnapshot(data, DialMarket.tradeQuote(result, code)) || data.getDouble("price") != 12.5
+                || !data.getString("quote_at").equals("2026-11-05T13:02:55"))
+            throw new AssertionError("live price and trade time must come from the same trade");
+        if (DialMarket.tradeQuote(result,"sz000001") != null) throw new AssertionError("wrong stock's trade selected");
+        tick.remove("source_at");
+        if (DialMarket.tradeQuote(result,code) != null) throw new AssertionError("undated trade selected");
     }
 
     private static double sum(JSONArray bins) throws Exception {

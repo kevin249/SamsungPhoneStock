@@ -2,14 +2,13 @@ package com.kevin.watchmcp;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.PowerManager;
 import android.os.SystemClock;
-import org.json.JSONArray;
+import com.kevin.market.TradingCalendar;
 import org.json.JSONObject;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -23,15 +22,7 @@ final class DialCalendar {
     private static long attemptedAt;
 
     static TradingCalendar parse(JSONObject payload) throws Exception {
-        if (!payload.optBoolean("ok") || !"tdx".equals(payload.optString("source"))
-                || !"SH".equals(payload.optString("market"))) throw new IOException("Invalid calendar source");
-        JSONArray rows=payload.getJSONArray("dates");
-        if (rows.length()==0) throw new IOException("Empty calendar");
-        if (rows.length()!=payload.getInt("row_count")) throw new IOException("Incomplete calendar");
-        List<String> dates=new ArrayList<>();
-        for (int i=0;i<rows.length();i++) dates.add(rows.getString(i));
-        return new TradingCalendar(TradingCalendar.parseDate(payload.getString("start_date")),
-                TradingCalendar.parseDate(payload.getString("end_date")),dates);
+        return TradingCalendar.fromTdx(payload);
     }
 
     static synchronized TradingCalendar.Day day(SharedPreferences prefs, LocalDate date) {
@@ -63,6 +54,8 @@ final class DialCalendar {
         long elapsed=SystemClock.elapsedRealtime();
         if (loading || key.equals(attemptedKey) && elapsed-attemptedAt<interval) return;
         loading=true; attemptedKey=key; attemptedAt=elapsed;
+        PowerManager.WakeLock calendarLock = DialMarket.holdForFetch(app, today == TradingCalendar.Day.UNKNOWN
+                && !app.getSystemService(PowerManager.class).isInteractive());
         NETWORK.execute(() -> {
             McpDirectClient client=null;
             try {
@@ -88,6 +81,7 @@ final class DialCalendar {
                 android.util.Log.w("WatchCalendar","交易日历暂不可用，保留缓存 " + error.getClass().getSimpleName());
             } finally {
                 if (client!=null) client.stop();
+                DialMarket.release(calendarLock);
                 synchronized (DialCalendar.class) { loading=false; }
             }
         });

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:background="#000000" android:padding="8dp">
+    android:orientation="vertical" android:background="@android:color/transparent" android:padding="8dp">
     <LinearLayout android:id="@+id/widget_quote_row" android:layout_width="match_parent"
         android:layout_height="wrap_content" android:gravity="center_vertical" android:baselineAligned="false">
         <TextView android:id="@+id/widget_price" style="@style/WidgetMarketLine"

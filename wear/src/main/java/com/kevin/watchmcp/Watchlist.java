@@ -3,7 +3,7 @@ package com.kevin.watchmcp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
+import com.kevin.market.StockSearch;
 
 /** 自选列表与当前股票；不依赖联网，空列表也会保留。 */
 final class Watchlist {
@@ -84,15 +84,7 @@ final class Watchlist {
         return code;
     }
 
-    /** 与桥接端代码规则一致；显式市场前缀/后缀优先，仅检查格式，不保证证券存在。 */
     static String normalize(String raw) {
-        if (raw == null) return null;
-        String value = raw.trim().toLowerCase(Locale.ROOT).replace(" ", "");
-        if (value.matches("(sh|sz|bj)[0-9]{6}")) return value;
-        if (value.matches("[0-9]{6}\\.(sh|sz|bj)")) return value.substring(7) + value.substring(0, 6);
-        if (!value.matches("[0-9]{6}")) return null;
-        String market = value.matches("(00|30|20|15|16|18|39).*") ? "sz"
-                : value.matches("(43|83|87|88|92).*") ? "bj" : "sh";
-        return market + value;
+        return StockSearch.normalize(raw);
     }
 }

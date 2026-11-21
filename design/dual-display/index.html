@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>手机行情设计预览</title>
+<style>
+*{box-sizing:border-box}
+:root{color-scheme:dark;--canvas:#121517;--ink:#e8eae6;--muted:#a6ada9;--line:#353c3c;--mint:#c1d7c7;--up:#eca08c;--down:#8fc9ad}
+body{margin:0;background:var(--canvas);color:var(--ink);font:16px/1.5 system-ui,"Microsoft YaHei",sans-serif}
+button,a,summary{-webkit-tap-highlight-color:transparent}
+a{color:inherit}button,summary{cursor:pointer}button{font:inherit;color:inherit}
+button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--mint);outline-offset:4px}
+main{max-width:1512px;margin:auto;padding:clamp(20px,4vw,64px)}
+header,.toolbar,.card-title,.live-head,.legend{display:flex;align-items:center;justify-content:space-between;gap:16px}
+header{align-items:end;flex-wrap:wrap;margin-bottom:26px}
+h1,h2,p,figure{margin:0}h1{font-size:clamp(27px,3.3vw,48px);line-height:1.22;font-weight:620;letter-spacing:-.045em}
+header p,.toolbar p,.code,.legend,.archive{color:var(--muted)}
+header p{margin-top:9px}.archive{display:inline-flex;min-height:44px;justify-content:center;align-items:center;padding:0 16px;border:1px solid var(--line);border-radius:5px;text-decoration:none;font-size:14px}.archive:hover{border-color:var(--muted);color:var(--ink)}
+.toolbar{border-top:1px solid var(--line);padding-top:20px;flex-wrap:wrap;gap:9px}
+.toolbar p{font-size:14px}.modes{display:inline-flex;gap:5px;padding:3px;border:1px solid var(--line);border-radius:8px}
+.modes button{border:0;background:transparent;border-radius:5px;min-height:44px;padding:0 15px;color:var(--muted)}
+.modes button[aria-pressed="true"]{background:var(--mint);color:#17251e;font-weight:650}
+details{margin:16px 0 26px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+summary{padding:13px 0;font-size:15px;color:var(--ink)}summary::marker{color:var(--mint)}summary small{margin-left:12px;font-size:13px;color:var(--muted)}
+.live{max-width:1030px;margin:2px auto 24px;padding:clamp(14px,2.6vw,32px);background:#0a0e0f;border:1px solid #343b39;border-radius:8px}
+.live-head{flex-wrap:wrap;align-items:center}.quote{display:flex;align-items:baseline;gap:10px 16px;flex-wrap:wrap}
+.quote h2{font-size:20px;font-weight:600}.price{font-size:clamp(27px,4vw,40px);font-weight:600;font-variant-numeric:tabular-nums}.delta{color:var(--up)}
+.code,.delta,.clock{font-variant-numeric:tabular-nums}.code,.delta{font-size:14px}
+.controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.clock{font-size:14px;color:var(--muted)}
+.controls button{min-width:76px;min-height:44px;border-radius:5px;border:1px solid #505e58;background:transparent}
+.legend{justify-content:flex-start;gap:6px 18px;flex-wrap:wrap;font-size:13px;margin:16px 0 3px}
+.swatch{display:inline-block;vertical-align:middle;background:var(--up);width:15px;height:3px;margin-right:5px}.sell{background:var(--down)}
+.plot{width:100%;display:block;overflow:visible}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,246px),1fr));gap:26px 20px;align-items:start}
+.card-title{margin-bottom:9px;justify-content:flex-start;gap:11px;font-size:18px;font-weight:590}
+.card-title span{color:var(--muted);font:14px/1.4 ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums}
+.original{display:block;background:#000;line-height:0;outline:1px solid #303636;outline-offset:0}
+.original:hover{outline-color:#879a90}.original img{display:block;width:100%;height:auto;aspect-ratio:1080/2340;object-fit:contain}
+@media(max-width:650px){main{padding:20px 16px}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 12px}
+header{margin-bottom:18px}.toolbar{padding-top:14px}.card-title{font-size:16px;gap:6px}.card-title span{font-size:12px}
+.modes{gap:2px}.modes button{padding:0 10px;font-size:14px}.toolbar p{font-size:13px}.legend{font-size:12px}.live{padding:14px 8px}.live-head{gap:8px}summary small{margin-left:8px}
+}
+@media(max-width:400px){.toolbar p{width:100%}header{gap:10px}.archive{padding:0 11px}}
+@media(min-width:651px) and (max-width:880px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style>
+</head>
+<body><main>
+<header><div><h1>手机行情设计预览</h1><p>15 款整屏设计 · 1080 × 2340</p></div>
+<a class="archive" href="dual-display-originals.zip" download>下载原图 ZIP ↓</a></header>
+<div class="toolbar"><div class="modes" role="group" aria-label="预览类别">
+<button type="button" data-mode="aod" aria-pressed="true" aria-controls="gallery">熄屏常显（10）</button>
+<button type="button" data-mode="lock" aria-pressed="false" aria-controls="gallery">锁屏（5）</button></div>
+<p>静态整屏 · 点图查看原图</p></div>
+<details id="playback"><summary>模拟行情试播 <small>5 次/秒 · 离线演示</small></summary>
+<section class="live" aria-label="离线模拟行情">
+<div class="live-head"><div class="quote"><h2>中兴通讯</h2><span class="code">000063</span><span class="price" id="quote">35.82</span><span class="delta" id="delta">+1.59%</span></div>
+<div class="controls"><span class="clock">模拟 <time id="clock">14:32:00</time></span><button id="pause" type="button">暂停</button></div></div>
+<div class="legend"><span>1 分钟 K</span><span><i class="swatch"></i>买盘 / 涨</span><span><i class="swatch sell"></i>卖盘 / 跌</span><span>L2 千档 · 32 个价区</span></div>
+<svg class="plot" id="plot" aria-label="模拟一分钟 K 线、历史 B/S 成交及共轴 L2 盘口" role="img"></svg>
+</section></details>
+<section class="grid" id="gallery" aria-label="熄屏常显静态预览"></section>
+<noscript>启用 JavaScript 可浏览分类相册与模拟试播；也可通过上方 ZIP 下载原图。</noscript>
+</main>
+<script id="market-seed" type="application/json">{"firstMinute":813,"candles":[[3581,3586,3579,3585],[3585,3587,3582,3583],[3583,3586,3580,3582],[3582,3584,3581,3583],[3583,3585,3580,3582],[3582,3585,3581,3582],[3582,3588,3580,3587],[3587,3592,3586,3590],[3590,3593,3587,3589],[3589,3591,3588,3590],[3590,3592,3587,3589],[3589,3592,3584,3585],[3585,3586,3580,3582],[3582,3587,3581,3585],[3585,3589,3583,3586],[3586,3587,3583,3584],[3584,3586,3582,3584],[3584,3587,3582,3583],[3583,3584,3576,3578],[3578,3580,3574,3575],[3575,3580,3573,3577],[3577,3579,3576,3578],[3578,3580,3574,3576],[3576,3580,3575,3577],[3577,3578,3575,3577],[3577,3579,3571,3572],[3572,3575,3567,3569],[3569,3571,3568,3570],[3570,3572,3567,3569],[3569,3572,3567,3568],[3568,3571,3566,3570],[3570,3573,3569,3571],[3571,3574,3565,3567],[3567,3568,3565,3566],[3566,3569,3564,3567],[3567,3570,3566,3567],[3567,3568,3565,3567],[3567,3573,3566,3571],[3571,3577,3569,3574],[3574,3575,3570,3571],[3571,3573,3567,3569],[3569,3574,3568,3571],[3571,3572,3567,3569],[3569,3571,3567,3568],[3568,3576,3566,3573],[3573,3577,3572,3576],[3576,3578,3572,3574],[3574,3577,3572,3573],[3573,3576,3571,3575],[3575,3577,3571,3572],[3572,3575,3569,3571],[3571,3577,3570,3576],[3576,3581,3574,3579],[3579,3582,3577,3578],[3578,3581,3576,3580],[3580,3583,3579,3581],[3581,3584,3576,3578],[3578,3579,3576,3577],[3577,3583,3575,3581],[3581,3585,3580,3582]],"last":3582,"previousClose":3526,"priceLimits":[3173,3879],"range":[3557,3599],"bins":32,"requestedDepth":1000,"fills":[{"minute":820,"price":3590,"side":"S"},{"minute":846,"price":3566,"side":"B"}],"ranks":[[42,91,48,91,147,46,76,40,79,35,135,72,85,77,95,90,31,32,195,45,35,56,29,30,267,45,42,28,31,63,42,38,67,41,43,32,44,70,26,43,56,37,32,29,68,47,24,24,27,41,80,27,67,45,84,52,30,24,26,25,69,23,70,44,28,74,30,53,23,42,34,23,24,39,80,73,28,29,37,79,78,53,23,71,23,40,35,61,22,79,22,31,29,63,86,25,31,36,31,27,47,43,48,23,22,22,24,54,33,58,22,22,34,22,66,52,78,63,22,62,29,24,34,45,22,53,23,63,26,28,37,57,55,71,72,49,22,34,23,37,42,45,22,68,33,22,85,22,38,37,22,33,24,48,27,29,33,45,32,22,23,34,22,25,43,23,33,30,47,23,58,43,37,22,41,56,81,24,22,51,42,60,52,50,49,23,72,57,22,44,33,28,27,38,82,23,32,24,45,58,63,22,22,22,25,68,22,31,52,32,32,36,78,37,39,74,86,41,57,83,22,30,22,72,80,22,32,32,33,46,84,22,22,55,54,25,42,23,25,72,22,57,33,42,44,33,34,33,52,29,66,28,26,34,22,34,71,22,65,22,22,22,22,66,77,50,36,65,45,22,64,31,51,47,25,66,30,24,39,25,22,25,22,23,22,29,59,58,25,77,48,41,22,22,22,30,29,57,51,26,54,40,30,79,34,28,54,66,24,29,32,22,66,52,42,47,46,36,31,30,84,23,54,55,81,64,42,22,46,39,75,62,23,32,74,38,29,32,36,27,44,22,36,25,23,61,22,41,22,27,28,32,54,23,37,82,77,35,23,56,49,54,69,64,56,34,65,75,50,57,24,31,86,42,27,60,48,84,22,35,46,51,48,42,24,40,26,80,22,22,45,23,33,26,40,38,40,25,57,23,22,28,22,44,47,22,49,76,54],[69,79,64,45,171,39,55,97,39,93,144,34,77,56,53,96,48,61,183,47,42,33,46,35,114,28,48,92,36,57,42,28,32,26,27,26,29,45,39,36,72,25,26,25,25,80,30,39,35,35,68,24,63,40,55,25,56,43,31,32,45,58,24,58,25,29,72,28,26,46,36,47,69,52,33,49,48,81,75,81,81,33,40,24,29,81,62,22,59,22,41,48,36,76,59,57,28,34,39,81,35,65,51,22,22,32,49,77,67,29,25,22,32,44,22,26,32,71,74,61,56,22,22,57,29,78,23,26,30,38,56,22,56,53,24,24,31,65,30,29,44,26,22,22,85,24,85,47,36,22,22,39,22,68,28,34,76,22,22,22,54,86,24,51,58,29,27,46,33,31,22,41,42,22,22,77,53,63,78,22,28,23,37,48,27,40,44,35,33,57,72,38,22,65,22,46,24,23,64,31,55,43,23,28,41,22,23,22,37,45,28,76,57,66,30,35,30,57,51,79,24,41,23,37,59,36,55,42,61,54,25,26,28,26,22,84,68,22,45,30,23,35,26,24,22,42,53,32,26,23,23,64,24,22,22,65,28,23,28,43,44,46,58,77,80,48,22,24,44,32,51,31,29,56,71,61,32,25,71,64,34,31,49,62,22,68,62,45,28,50,83,40,34,29,22,57,28]]}</script>
+<script>
+"use strict";
+const sets={
+  aod:[[104,"墨白宽字"],[105,"薄荷双叠"],[106,"矿蓝分栏"],[107,"暖沙错位"],[108,"点阵"],[109,"空心"],[110,"分秒"],[111,"长针"],[112,"月桂"],[113,"半墨"]],
+  lock:[[95,"深夜书店"],[96,"雨停便利店"],[100,"桥影"],[101,"面摊"],[102,"跨江索道"]]
+};
+const gallery=document.getElementById("gallery");
+function showMode(mode){
+  const group=mode==="lock"?"锁屏":"熄屏常显";
+  gallery.setAttribute("aria-label",group+"静态预览");
+  gallery.replaceChildren(...sets[mode].map(([id,name])=>{
+    const figure=document.createElement("figure");
+    const caption=document.createElement("figcaption");
+    caption.className="card-title";
+    const number=document.createElement("span"); number.textContent=id;
+    caption.append(number,name);
+    const link=document.createElement("a"); link.className="original";
+    link.href=mode+"/"+id+".png";link.target="_blank";link.rel="noopener";
+    link.setAttribute("aria-label",id+" "+name+"，查看整屏原图");
+    const img=document.createElement("img");img.src=link.getAttribute("href");img.alt=group+" · "+name;
+    img.width=1080;img.height=2340;img.loading="lazy";img.decoding="async";
+    link.append(img);figure.append(caption,link);return figure;
+  }));
+  for(const button of document.querySelectorAll("[data-mode]")){
+    button.setAttribute("aria-pressed",String(button.dataset.mode===mode));
+  }
+}
+for(const button of document.querySelectorAll("[data-mode]")){
+  button.addEventListener("click",()=>showMode(button.dataset.mode));
+}
+showMode("aod");
+
+const seed=JSON.parse(document.getElementById("market-seed").textContent);
+const UP="#eca08c",DOWN="#8fc9ad",MUTED="#b7bfbb",GRID="#343b39";
+const book=seed.ranks.map(side=>side.slice());
+const bars=seed.candles.map((ohlc,index)=>({minute:seed.firstMinute+index,ohlc:ohlc.slice()}));
+const fills=seed.fills;
+const start=bars.at(-1).minute*60000,closeAt=15*60*60000;
+let simTime=start,mid=seed.last,sequence=14032,paused=false,interval=null;
+const root=document.getElementById("playback"),pause=document.getElementById("pause"),plot=document.getElementById("plot");
+const priceEl=document.getElementById("quote"),deltaEl=document.getElementById("delta"),clock=document.getElementById("clock");
+function random(){
+  sequence=(Math.imul(1664525,sequence)+1013904223)>>>0;
+  return sequence/4294967296;
+}
+const pad=n=>String(n).padStart(2,"0");
+const stamp=minute=>pad(Math.floor(minute/60))+":"+pad(minute%60);
+const price=cents=>(cents/100).toFixed(2);
+
+function nextTick(){
+  simTime+=200;
+  if(simTime>=closeAt){simTime=closeAt;syncTimer();render();return}
+  const minute=Math.floor(simTime/60000),previous=mid;
+  const nudge=random()+(seed.last-mid)*.012;
+  mid=Math.min(3620,Math.max(3540,mid+(nudge>.64?1:nudge<.36?-1:0)));
+  if(bars.at(-1).minute<minute){
+    bars.push({minute,ohlc:[previous,Math.max(previous,mid),Math.min(previous,mid),mid]});
+    if(bars.length>seed.candles.length) bars.shift();
+  }else{
+    const tail=bars.at(-1).ohlc;
+    tail[1]=Math.max(tail[1],mid);tail[2]=Math.min(tail[2],mid);tail[3]=mid;
+  }
+  for(const side of book){
+    for(let change=0;change<3;change++){
+      const rank=Math.floor(random()*(change===0?18:side.length));
+      side[rank]=Math.max(4,Math.min(400,side[rank]+Math.round(random()*28)-14));
+    }
+  }
+  render();
+}
+function syncTimer(){
+  if(interval!==null){clearInterval(interval);interval=null}
+  const ended=simTime>=closeAt;
+  pause.disabled=ended;
+  pause.textContent=ended?"已收盘":paused?"继续":"暂停";
+  if(root.open&&!document.hidden&&!ended&&!paused) interval=setInterval(nextTick,200);
+}
+function depthProfile(low,high){
+  const bins=Array.from({length:2},()=>Array(seed.bins).fill(0));
+  for(let side=0;side<2;side++){
+    const sign=side===0?-1:1;
+    for(let rank=1;rank<=seed.requestedDepth;rank++){
+      const level=mid+sign*rank;
+      if(level<seed.priceLimits[0]||level>seed.priceLimits[1]) break;
+      if(level<low||level>high) continue;
+      const bin=Math.floor((level/100-low/100)/(high/100-low/100)*(seed.bins-1)+.5);
+      bins[side][bin]+=book[side][rank-1]??22;
+    }
+  }
+  return bins;
+}
+function render(){
+  const minute=Math.floor(simTime/60000);
+  clock.textContent=stamp(minute)+":"+pad(Math.floor(simTime/1000)%60);
+  priceEl.textContent=price(mid);
+  const pct=(mid/seed.previousClose-1)*100;
+  deltaEl.textContent=(pct>=0?"+":"")+pct.toFixed(2)+"%";
+  deltaEl.style.color=pct>=0?UP:DOWN;
+  if(!root.open)return;
+  const width=Math.max(245,Math.round(plot.getBoundingClientRect().width));
+  const small=width<550,height=small?252:338;
+  const x0=small?41:52,x1=width-5,y0=22,y1=height-28;
+  const low=Math.min(seed.range[0],...bars.map(b=>b.ohlc[2]-6));
+  const high=Math.max(seed.range[1],...bars.map(b=>b.ohlc[1]+6));
+  const x=i=>x0+3+(x1-x0-6)*i/(bars.length-1);
+  const y=cents=>y1-(cents-low)/(high-low)*(y1-y0);
+  const svg=[];
+  const line=(ax,ay,bx,by,color,w=1,attrs="")=>'<line x1="'+ax+'" y1="'+ay+'" x2="'+bx+'" y2="'+by+'" stroke="'+color+'" stroke-width="'+w+'" '+attrs+'/>';
+  const label=(ax,ay,value,color,anchor="start",fontSize=12,weight=400)=>'<text x="'+ax+'" y="'+ay+'" fill="'+color+'" text-anchor="'+anchor+'" dominant-baseline="middle" font-size="'+fontSize+'" font-weight="'+weight+'">'+value+'</text>';
+  const bins=depthProfile(low,high),largest=Math.max(1,...bins.flat());
+  svg.push('<g data-layer="book" opacity=".5">');
+  bins.forEach((side,s)=>side.forEach((qty,slot)=>{
+    if(qty===0)return;
+    const cy=y(low+(high-low)*slot/(seed.bins-1));
+    svg.push(line(x1-(x1-x0)*.34*qty/largest,cy,x1,cy,s?DOWN:UP,small?1.8:2.8,'data-slot="'+slot+'" data-lots="'+qty+'"'));
+  }));
+  svg.push('</g><g font-family="ui-monospace, Consolas, monospace">');
+  const guides=[mid];
+  for(let level=Math.ceil(low/10)*10;level<high;level+=10){
+    if(Math.abs(y(level)-y(mid))>23)guides.push(level);
+  }
+  guides.forEach(level=>{
+    svg.push(line(x0,y(level),x1,y(level),GRID,1,'stroke-dasharray="3 7"'));
+    svg.push(label(0,y(level),price(level),MUTED,"start",small?11:13,level===mid?650:400));
+  });
+  const body=Math.max(1.4,(x1-x0)/bars.length*.59);
+  svg.push('<g data-layer="candles">');
+  bars.forEach(({minute,ohlc:[o,h,l,c]},i)=>{
+    const cx=x(i),ink=c>=o?UP:DOWN;
+    svg.push('<g data-minute="'+minute+'" data-ohlc="'+[o,h,l,c].join(",")+'"><title>'+stamp(minute)+'　开 '+price(o)+'　高 '+price(h)+'　低 '+price(l)+'　收 '+price(c)+'</title>');
+    svg.push(line(cx,y(h),cx,y(l),ink,small?1:1.4));
+    svg.push('<rect x="'+(cx-body/2)+'" y="'+Math.min(y(o),y(c))+'" width="'+body+'" height="'+Math.max(1.6,Math.abs(y(o)-y(c)))+'" fill="'+ink+'"/></g>');
+  });
+  svg.push('</g>');
+  for(const fill of fills){
+    const i=bars.findIndex(bar=>bar.minute===fill.minute);
+    if(i<0)continue;
+    const sell=fill.side==="S",sign=sell?-1:1,ink=sell?DOWN:UP,cx=x(i),cy=y(fill.price);
+    const near=bars.slice(Math.max(0,i-1),i+2);
+    const edge=sell?Math.max(...near.map(b=>b.ohlc[1])):Math.min(...near.map(b=>b.ohlc[2]));
+    const tip=y(edge)+sign*4,foot=tip+sign*6;
+    const tx=cx+9>x1-8?cx-9:cx+9;
+    svg.push('<g data-fill="'+fill.side+'" data-minute="'+fill.minute+'" data-price="'+fill.price+'"><title>'+fill.side+' · '+stamp(fill.minute)+' · 成交价 '+price(fill.price)+'</title>');
+    svg.push(line(cx,cy,cx,tip,ink,1.5));
+    svg.push('<circle cx="'+cx+'" cy="'+cy+'" r="2.5" stroke="'+ink+'" fill="#0a0e0f"/><path d="M'+cx+' '+tip+'l-4 '+(sign*6)+'h8z" fill="'+ink+'"/>');
+    svg.push(label(tx,foot,fill.side,ink,tx<cx?"end":"start",small?14:17,700),'</g>');
+  }
+  svg.push(line(x0,y1+4,x1,y1+4,GRID));
+  const centerIndex=bars.findIndex(b=>b.minute%30===0&&b.minute>bars[8].minute&&b.minute<bars.at(-9).minute);
+  const center=centerIndex<0?Math.floor(bars.length/2):centerIndex;
+  for(const [i,anchor] of [[0,"start"],[center,"middle"],[bars.length-1,"end"]]){
+    svg.push(label(x(i),height-8,stamp(bars[i].minute),MUTED,anchor,small?11:13));
+  }
+  svg.push('</g>');
+  plot.setAttribute("viewBox","0 0 "+width+" "+height);
+  plot.innerHTML=svg.join("");
+}
+root.addEventListener("toggle",()=>{syncTimer();render()});
+pause.addEventListener("click",()=>{paused=!paused;syncTimer()});
+document.addEventListener("visibilitychange",syncTimer);
+new ResizeObserver(()=>{if(root.open)render()}).observe(plot.parentElement);
+</script>
+</body></html>

@@ -36,6 +36,8 @@ final class PhoneDailyCandles {
     static JSONObject merge(JSONObject daily, JSONObject live) throws Exception {
         if (daily == null || live == null || !daily.optString("symbol").equals(live.optString("symbol"))) return daily;
         JSONObject result = PhoneRealtimeCandles.copy(daily);
+        JSONArray signals = PhoneSignalHistory.retain(daily.optJSONArray("fills"),live.optJSONArray("fills"));
+        if (signals.length()>0) result.put("fills",signals);
         JSONArray rows = new JSONArray(daily.getJSONArray("bars").toString());
         JSONObject tail = rows.getJSONObject(rows.length()-1);
         String day = live.optString("date");
@@ -57,8 +59,9 @@ final class PhoneDailyCandles {
         tail.put("close",price).put("high",Math.max(price,Math.max(high,tail.optDouble("high",high))))
                 .put("low",Math.min(price,Math.min(low,tail.optDouble("low",low))));
         result = history(daily.getString("symbol"),live.optString("name",daily.optString("name")),rows);
-        for (String key : new String[]{"quote_at","previous","book","book_status","fills"})
+        for (String key : new String[]{"quote_at","previous","book","book_status"})
             if (live.has(key)) result.put(key,live.get(key));
+        if (signals.length()>0) result.put("fills",signals);
         return result;
     }
 }

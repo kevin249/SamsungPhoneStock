@@ -66,4 +66,17 @@ public final class PhoneDailyCandlesTest {
         assertTrue(plot.hasAverage());
         assertEquals(600*(59.5f)/60,plot.barX(59,0,600),.001);
     }
+    @Test public void refreshedDailyBarsCannotEraseAcceptedHistoricalSignals() throws Exception {
+        JSONObject daily = PhoneDailyCandles.history("sz000063","",new JSONArray()
+                .put(bar("2026-11-06",12)).put(bar("2026-11-09",13)));
+        JSONArray old = new JSONArray("[{bar_time:'2026-11-06 14:00',side:'B',price:12}]");
+        daily.put("fills",old);
+        JSONObject live = new JSONObject().put("symbol","sz000063").put("date","2026-11-09")
+                .put("price",14).put("high",18).put("low",9).put("fills",new JSONArray());
+        assertEquals(old.toString(),PhoneDailyCandles.merge(daily,live).getJSONArray("fills").toString());
+        live.put("fills",new JSONArray("[{bar_time:'2026-11-09 10:00',side:'S',price:14}]"));
+        assertEquals(2,PhoneDailyCandles.merge(daily,live).getJSONArray("fills").length());
+        assertEquals(1,daily.getJSONArray("fills").length());
+    }
+
 }

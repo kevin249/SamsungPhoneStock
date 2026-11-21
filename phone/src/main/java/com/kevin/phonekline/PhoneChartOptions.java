@@ -16,7 +16,7 @@ final class PhoneChartOptions {
         this.period = period;
         intraday = "realtime".equals(period);
         signals = !"1d".equals(period) && prefs.getBoolean("show_signals", true);
-        depth = prefs.getBoolean("show_depth", true);
+        depth = !"1d".equals(period) && prefs.getBoolean("show_depth", true);
     }
 
     boolean matches(PhoneChartOptions other) {
@@ -39,13 +39,13 @@ final class PhoneChartOptions {
     }
 
     String legend(PhoneMarketPlot plot) {
-        String average = intraday ? (plot.hasAverage() ? "成交均价" : "暂无均价") : "MA5";
-        return title() + " · " + average;
+        String average = intraday ? (plot.hasAverage() ? "成交均价" : "暂无均价") : "1d".equals(period) ? "MA5/10/20" : "MA5";
+        return title() + " · " + average + " · TDW";
     }
 
     String overlays(PhoneMarketPlot plot) {
+        if ("1d".equals(period)) return "";
         String book = depth ? plot.bookLabel() : "盘口已关";
-        if ("1d".equals(period)) return book;
         String marks = !signals ? "B/S 已关" : plot.hasSignals() ? "B/S" : "暂无 B/S";
         return book + " · " + marks;
     }

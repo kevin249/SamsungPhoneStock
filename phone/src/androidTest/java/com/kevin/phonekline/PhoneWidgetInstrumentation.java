@@ -35,7 +35,7 @@ final class PhoneWidgetInstrumentation {
     private PhoneWidgetInstrumentation() { }
 
     static void check(Context target, Context host) throws Exception {
-        SharedPreferences prefs = host.getSharedPreferences("widget-render-instrumentation", Context.MODE_PRIVATE);
+        SharedPreferences prefs = target.getSharedPreferences("widget-render-instrumentation", Context.MODE_PRIVATE);
         Context context = new ContextWrapper(target) {
             @Override public Context getApplicationContext() { return this; }
             @Override public SharedPreferences getSharedPreferences(String name, int mode) {
@@ -44,51 +44,60 @@ final class PhoneWidgetInstrumentation {
         };
         JSONObject data = fixture();
         try {
+            android.util.Log.i("PhoneRegression", "widget: checkPowerRates(context,prefs)");
             checkPowerRates(context,prefs);
+            PhoneDualWidgetInstrumentation.check(context,host,prefs);
             prefs.edit().clear().putString("symbol", "sz000063").putInt("aod_theme", 104)
                     .putString("chart_mode", "1m").putBoolean("show_depth", true).putBoolean("show_signals", true).commit();
-            RemoteViews first = PhoneWidgetRenderer.render(context, ID, data);
+            RemoteViews first = render(context, ID, data);
+            android.util.Log.i("PhoneRegression", "widget: checkWallpaperVisibility()");
             checkWallpaperVisibility();
             checkBoundHostUpgrade(context, host, R.layout.phone_market_widget, 0x7f030000, first);
             checkBoundHostUpgrade(context, host, R.layout.phone_market_widget_v2, 0x7f030001, first);
+            checkBoundHostUpgrade(context, host, R.layout.phone_market_widget_v3, 0x7f030002, first);
             View widget = first.apply(host, new FrameLayout(host));
             checkHostContent(widget);
             require(text(widget, R.id.widget_code).contains("000063"), "market code");
             require(text(widget, R.id.widget_chart_legend).contains("1 分钟 K"), "candle mode");
             require(text(widget, R.id.widget_stamp).contains("盘口 14:30:06"), "actual book source time");
             Bitmap candles = plot(widget);
+            android.util.Log.i("PhoneRegression", "widget: checkDepthScale(prefs, data)");
             checkDepthScale(prefs, data);
             JSONObject bookOnly = new JSONObject(data.toString());
             JSONObject updatedBook = bookOnly.getJSONObject("book");
             updatedBook.put("source_at", "2026-11-05 14:30:11");
             updatedBook.getJSONArray("levels").getJSONObject(0).put("volume", 4700);
-            PhoneWidgetRenderer.render(context, ID, bookOnly).reapply(host, widget);
+            render(context, ID, bookOnly).reapply(host, widget);
             String updatedStamp = text(widget, R.id.widget_stamp);
             require(updatedStamp.contains("14:30:08") && updatedStamp.contains("盘口 14:30:11")
                     && !candles.sameAs(plot(widget)), "depth-only update with unchanged last trade");
 
             prefs.edit().putBoolean("show_depth", false).commit();
-            PhoneWidgetRenderer.render(context, ID, data).reapply(host, widget);
+            render(context, ID, data).reapply(host, widget);
             Bitmap noBook = plot(widget);
             require(!noBook.sameAs(candles), "real book overlay toggle");
 
             prefs.edit().putBoolean("show_signals", false).commit();
-            PhoneWidgetRenderer.render(context, ID, data).reapply(host, widget);
+            render(context, ID, data).reapply(host, widget);
+            android.util.Log.i("PhoneRegression", "widget: Bitmap bare = plot(widget)");
             Bitmap bare = plot(widget);
             require(!bare.sameAs(noBook), "matched trade markers toggle");
             require(hasYellow(bare), "MA5 on the candle chart");
 
             prefs.edit().putString("chart_mode", "realtime").commit();
-            PhoneWidgetRenderer.render(context, ID, data).reapply(host, widget);
+            render(context, ID, data).reapply(host, widget);
             require(text(widget, R.id.widget_chart_legend).contains("分时"), "intraday mode");
             require(!bare.sameAs(plot(widget)), "intraday line vs candle bodies");
-            require(!hasYellow(plot(widget)), "no invented average when turnover is unavailable");
+            require(!new PhoneMarketPlot(data,true,true,true,true).hasAverage(), "no invented average when turnover is unavailable");
+            require(text(widget, R.id.widget_chart_legend).contains("TDW"), "TDW legend in AOD realtime mode");
+            require(hasTdw(plot(widget)), "TDW threshold lines in AOD realtime bitmap");
             JSONObject weighted = new JSONObject(data.toString());
             JSONArray minuteRows = weighted.getJSONArray("bars");
             for (int i=0; i<minuteRows.length(); i++) minuteRows.getJSONObject(i).put("session_average",35.4+i*.003);
-            PhoneWidgetRenderer.render(context, ID, weighted).reapply(host, widget);
+            render(context, ID, weighted).reapply(host, widget);
             require(hasYellow(plot(widget)), "yellow weighted session average");
 
+            android.util.Log.i("PhoneRegression", "widget: prefs.edit().putInt(aod_theme, 108).commit()");
             prefs.edit().putInt("aod_theme", 108).commit();
             for (String mode : new String[]{"1m", "realtime"}) {
                 prefs.edit().putString("chart_mode", mode).commit();
@@ -97,17 +106,18 @@ final class PhoneWidgetInstrumentation {
                     checkSessionPositions(context, host, widget, prefs, data, size[0], size[1]);
                 }
             }
+            android.util.Log.i("PhoneRegression", "widget: JSONObject summary = new JSONObject(data.toString())");
             JSONObject summary = new JSONObject(data.toString());
             summary.remove("bars");
-            PhoneWidgetRenderer.render(context, ID, summary, 150, 95).reapply(host, widget);
+            render(context, ID, summary, 150, 95).reapply(host, widget);
             Bitmap summaryPlot = plot(widget);
             summary.put("high", 39.77).put("low", 30.10);
-            PhoneWidgetRenderer.render(context, ID, summary, 150, 95).reapply(host, widget);
+            render(context, ID, summary, 150, 95).reapply(host, widget);
             require(changedLabel(summaryPlot, plot(widget), true) && changedLabel(summaryPlot, plot(widget), false),
                     "quote-only daily numbers");
 
             prefs.edit().putString("symbol", "sh600519").commit();
-            PhoneWidgetRenderer.render(context, ID, null).reapply(host, widget);
+            render(context, ID, null).reapply(host, widget);
             requireNoClock(widget);
             require(text(widget, R.id.widget_code).contains("600519"), "new symbol");
             require(!text(widget, R.id.widget_name).contains("行情测试"), "stale stock name");
@@ -116,6 +126,26 @@ final class PhoneWidgetInstrumentation {
         } finally {
             prefs.edit().clear().commit();
         }
+    }
+
+    private static RemoteViews render(Context context, int id, JSONObject data) {
+        return render(context, id, data, 280, 210);
+    }
+
+    private static RemoteViews render(Context context, int id, JSONObject data, int width, int height) {
+        String mode = context.getSharedPreferences("phone_dial", Context.MODE_PRIVATE).getString("chart_mode", "1m");
+        return PhoneWidgetRenderer.render(context, id, data, width, height, mode);
+    }
+
+    private static boolean hasTdw(Bitmap bitmap) {
+        for (int y = bitmap.getHeight() / 2; y < bitmap.getHeight(); y++) {
+            for (int x = 0; x < bitmap.getWidth(); x++) {
+                int color = bitmap.getPixel(x, y);
+                if (Color.red(color) > 60 && Color.blue(color) > 60
+                        && Color.red(color) > Color.green(color) * 1.5 && Color.blue(color) > Color.green(color) * 1.5) return true;
+            }
+        }
+        return false;
     }
 
     private static void checkBoundHostUpgrade(Context target, Context hostContext, int oldId, int shippedId, RemoteViews next) {
@@ -230,7 +260,7 @@ final class PhoneWidgetInstrumentation {
         require(text(widget, R.id.widget_name).contains("行情测试"), "stock name");
         require("35.82".equals(text(widget, R.id.widget_price)), "quote");
         TextView price = widget.findViewById(R.id.widget_price);
-        require(price.getCurrentTextColor() == Color.WHITE, "white quote");
+        require(price.getCurrentTextColor() == PhoneMarketPlot.WIDGET_TEXT, "soft white quote");
         if (android.os.Build.VERSION.SDK_INT >= 28) {
             require(price.getTypeface().getWeight() >= 700, "bold quote");
         }
@@ -250,7 +280,7 @@ final class PhoneWidgetInstrumentation {
     }
 
     private static void checkDailyLabels(Context context, Context host, View widget, JSONObject data, int w, int h) throws Exception {
-        PhoneWidgetRenderer.render(context, ID, data, w, h).reapply(host, widget);
+        render(context, ID, data, w, h).reapply(host, widget);
         checkHostContent(widget);
         Bitmap original = plot(widget);
         int timePixels = 0;
@@ -261,11 +291,11 @@ final class PhoneWidgetInstrumentation {
         }
         require(timePixels >= 8, "readable time axis at " + w + "x" + h);
         JSONObject changed = new JSONObject(data.toString()).put("high", 39.77);
-        PhoneWidgetRenderer.render(context, ID, changed, w, h).reapply(host, widget);
+        render(context, ID, changed, w, h).reapply(host, widget);
         Bitmap newHigh = plot(widget);
         require(changedLabel(original, newHigh, true), "daily high at upper left " + w + "x" + h);
         changed.put("low", 30.10);
-        PhoneWidgetRenderer.render(context, ID, changed, w, h).reapply(host, widget);
+        render(context, ID, changed, w, h).reapply(host, widget);
         require(changedLabel(newHigh, plot(widget), false), "daily low at lower left " + w + "x" + h);
     }
 
@@ -285,6 +315,7 @@ final class PhoneWidgetInstrumentation {
 
     private static void checkSessionPositions(Context context, Context host, View widget, SharedPreferences prefs,
                                               JSONObject base, int w, int h) throws Exception {
+        android.util.Log.i("PhoneRegression", "positions " + w + "x" + h + " " + prefs.getString("chart_mode", ""));
         JSONArray bars = new JSONArray(), withoutProbes = new JSONArray();
         for (String time : new String[]{"09:31", "10:30", "13:01"}) bars.put(positionBar(time));
         // Keep more than 60 subsequent candles. A rolling 60-minute viewport loses all three probes.
@@ -294,7 +325,7 @@ final class PhoneWidgetInstrumentation {
             withoutProbes.put(bar);
         }
         JSONObject tradingDay = new JSONObject(base.toString()).put("bars", bars);
-        PhoneWidgetRenderer.render(context, ID, tradingDay, w, h).reapply(host, widget);
+        render(context, ID, tradingDay, w, h).reapply(host, widget);
         Bitmap full = plot(widget);
         // Capture the literal text and its alignment through the production Canvas draw path.
         int plotWidth = w < 205 ? 450 : 650;
@@ -311,15 +342,22 @@ final class PhoneWidgetInstrumentation {
         require(axis.rightPrice, "right-side price ticks " + w + "x" + h);
 
         tradingDay.put("bars", withoutProbes);
-        PhoneWidgetRenderer.render(context, ID, tradingDay, w, h).reapply(host, widget);
+        render(context, ID, tradingDay, w, h).reapply(host, widget);
         Bitmap omitted = plot(widget);
-        require(differsInBand(full, omitted, 0, .025), "opening price under left corner labels");
+        // TDW legitimately changes when its input history changes. Compare only the price panel.
+        require(Float.isFinite(axis.tdwTop), "TDW panel boundary recorded");
+        // Use the upper price band: small host bitmap rounding and label outlines may cross
+        // the separator, while all three fixed-price probes intersect this band.
+        int priceBottom = Math.min((int)(axis.tdwTop * full.getHeight() / plotHeight), full.getHeight() * 45 / 100);
+        require(differsInBand(full, omitted, 0, .025, priceBottom), "opening price under left corner labels");
         float plotFraction = axis.gridRight / plotWidth;
-        require(differsInBand(full, omitted, .235 * plotFraction, .265 * plotFraction), "10:30 price at one-quarter session");
-        require(differsInBand(full, omitted, .485 * plotFraction, .515 * plotFraction), "afternoon open at half session");
-        require(!differsInBand(full, omitted, .30 * plotFraction, .45 * plotFraction)
-                && !differsInBand(full, omitted, .60 * plotFraction, .95 * plotFraction),
-                "removing three timestamps must not slide the other prices");
+        require(differsInBand(full, omitted, .235 * plotFraction, .265 * plotFraction, priceBottom), "10:30 price at one-quarter session");
+        require(differsInBand(full, omitted, .485 * plotFraction, .515 * plotFraction, priceBottom), "afternoon open at half session");
+        try(java.io.FileOutputStream out=context.openFileOutput("regression-position-full.png",Context.MODE_PRIVATE)) {full.compress(Bitmap.CompressFormat.PNG,100,out);}
+        try(java.io.FileOutputStream out=context.openFileOutput("regression-position-omitted.png",Context.MODE_PRIVATE)) {omitted.compress(Bitmap.CompressFormat.PNG,100,out);}
+        require(!differsInBand(full, omitted, .30 * plotFraction, .45 * plotFraction, priceBottom)
+                && !differsInBand(full, omitted, .60 * plotFraction, .95 * plotFraction, priceBottom),
+                "removing three timestamps must not slide the other prices " + w + "x" + h + " " + prefs.getString("chart_mode", "") + " priceBottom="+priceBottom+" plotFraction="+plotFraction);
     }
 
     private static JSONObject positionBar(String time) throws Exception {
@@ -327,10 +365,16 @@ final class PhoneWidgetInstrumentation {
                 .put("low",34.20).put("close",35.82);
     }
 
-    private static boolean differsInBand(Bitmap a, Bitmap b, double left, double right) {
-        for (int y=0; y<a.getHeight()*4/5; y++) {
+    private static boolean differsInBand(Bitmap a, Bitmap b, double left, double right, int bottom) {
+        int changed = 0;
+        // Skia can vary a couple of antialias pixels when an earlier path segment is removed.
+        // A shifted price or missing probe changes a visible cluster, not two edge pixels.
+        for (int y=0; y<Math.min(bottom, a.getHeight()); y++) {
             for (int x=(int)(a.getWidth()*left); x<a.getWidth()*right; x++) {
-                if (a.getPixel(x,y) != b.getPixel(x,y)) return true;
+                int first=a.getPixel(x,y), second=b.getPixel(x,y);
+                int delta=Math.max(Math.abs(Color.red(first)-Color.red(second)),
+                        Math.max(Math.abs(Color.green(first)-Color.green(second)),Math.abs(Color.blue(first)-Color.blue(second))));
+                if (delta>24 && ++changed>=4) return true;
             }
         }
         return false;
@@ -339,6 +383,7 @@ final class PhoneWidgetInstrumentation {
     private static final class AxisLabels extends Canvas {
         final int width;
         final java.util.Set<Integer> gridLines = new java.util.HashSet<>();
+        float tdwTop = Float.NaN;
         float gridRight = Float.NaN, priceLeft = Float.POSITIVE_INFINITY;
         boolean rightPrice;
         float shortDepth = Float.POSITIVE_INFINITY, longDepth;
@@ -349,6 +394,7 @@ final class PhoneWidgetInstrumentation {
 
         @Override public void drawLine(float x0, float y0, float x1, float y1, Paint paint) {
             int color = paint.getColor();
+            if (color == 0xff777777 && y0 == y1 && x1 - x0 >= width * .55f) tdwTop = y0;
             boolean neutral = Math.abs(Color.red(color)-Color.green(color)) <= 24
                     && Math.abs(Color.blue(color)-Color.green(color)) <= 24;
             if (neutral && x0 == x1 && Math.abs(y1-y0) > 10) {

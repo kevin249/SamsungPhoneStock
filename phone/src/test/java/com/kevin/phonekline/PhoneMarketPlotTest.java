@@ -163,7 +163,6 @@ public final class PhoneMarketPlotTest {
         PhoneMarketPlot rolling = new PhoneMarketPlot(s,false,false,false);
         assertEquals(32,rolling.averageAt(0),.000001);
     }
-
     @Test public void dailyHidesSignalsWhileMinuteChartsKeepThem() throws Exception {
         JSONObject data = snapshot(new JSONArray().put(bar("10:30",35)))
                 .put("fills",new JSONArray().put(new JSONObject()
@@ -172,6 +171,42 @@ public final class PhoneMarketPlotTest {
         data.put("period","1d");
         // The cached daily snapshot may still be drawn during a switch back to realtime.
         assertFalse(new PhoneMarketPlot(data,true,true,true,true).hasSignals());
+    }
+
+    @Test public void dailyAlwaysHidesDepthWhileMinuteChartsKeepIt() throws Exception {
+        JSONObject data = snapshot(new JSONArray().put(bar("10:30",35)))
+                .put("book",new JSONObject().put("source_at",DAY+" 10:30:00").put("levels",
+                        new JSONArray().put(new JSONObject().put("price",35).put("volume",100).put("side","ask"))));
+        assertTrue(new PhoneMarketPlot(data,true,true,true).hasBook());
+        assertTrue(new PhoneMarketPlot(data,false,true,true,true).hasBook());
+        data.put("period","1d");
+        assertFalse(new PhoneMarketPlot(data,false,true,true).hasBook());
+        assertFalse(new PhoneMarketPlot(data,false,true,true,true).hasBook());
+        assertFalse(new PhoneMarketPlot(data,true,true,true,true).hasBook());
+    }
+
+    @Test public void dailyMovingAveragesUseTradingBarsAndHistoryBeforeTheVisibleWindow() throws Exception {
+        JSONArray rows = new JSONArray();
+        java.time.LocalDate start = java.time.LocalDate.of(2026,1,1);
+        for (int i=0; i<80; i++) {
+            double close=10+i;
+            rows.put(new JSONObject().put("time",start.plusDays(i*2).toString()+" 15:00")
+                    .put("open",close).put("high",close+1).put("low",close-1).put("close",close));
+        }
+        JSONObject data = snapshot(rows).put("period","1d");
+        PhoneMarketPlot plot = new PhoneMarketPlot(data,false,true,true,true);
+        for (int period : new int[]{5,10,20}) {
+            assertEquals(30-(period-1)/2.0,plot.averageAt(0,period),1e-9);
+            assertEquals(89-(period-1)/2.0,plot.averageAt(59,period),1e-9);
+        }
+        JSONArray shortRows = new JSONArray();
+        for (int i=0;i<19;i++) shortRows.put(rows.get(i));
+        PhoneMarketPlot shortPlot = new PhoneMarketPlot(snapshot(shortRows).put("period","1d"));
+        assertTrue(Double.isNaN(shortPlot.averageAt(3,5)));
+        assertEquals(12,shortPlot.averageAt(4,5),1e-9);
+        assertTrue(Double.isNaN(shortPlot.averageAt(8,10)));
+        assertEquals(14.5,shortPlot.averageAt(9,10),1e-9);
+        assertTrue(Double.isNaN(shortPlot.averageAt(18,20)));
     }
 
 }

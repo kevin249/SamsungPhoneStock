@@ -13,6 +13,9 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
     final PhoneCandleView view;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final SharedPreferences prefs;
+    private final Context context;
+    private final java.util.function.Supplier<java.time.LocalDateTime> clock;
+    private String currentPeriod;
     private final PhoneDisplayFeed feed;
     private final PhoneDisplayFeed lowerFeed;
     private final Runnable paint;
@@ -26,6 +29,19 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
     private long frameDue = Long.MAX_VALUE;
 
     PhoneSystemDisplay(Context context, boolean wallpaper, Runnable paint) {
+        this(context, wallpaper, paint, PhoneRealtimeCandles::now);
+    }
+
+    PhoneSystemDisplay(Context context, boolean wallpaper, Runnable paint,
+                       java.util.function.Supplier<java.time.LocalDateTime> clock) {
+        this(context,wallpaper,paint,clock,snapshot -> PhoneMarketWidgetProvider.visibleQuote(context,snapshot));
+    }
+
+    PhoneSystemDisplay(Context context, boolean wallpaper, Runnable paint,
+                       java.util.function.Supplier<java.time.LocalDateTime> clock,
+                       java.util.function.Consumer<JSONObject> minuteObserver) {
+        this.clock = clock;
+        this.context = context;
         prefs = context.getSharedPreferences("phone_dial", Context.MODE_PRIVATE);
         this.paint = paint;
         view = new PhoneCandleView(context);
@@ -39,10 +55,11 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
 
             }
             requestFrame();
-        }, snapshot -> PhoneMarketWidgetProvider.visibleQuote(context,snapshot));
+        }, minuteObserver);
         lowerFeed = new PhoneDisplayFeed(prefs,(snapshot,status) -> {
             if (!active) return;
-            view.setLowerMarket(snapshot,PhoneDisplayStocks.second(prefs),status);
+            view.setLowerMarket(snapshot,PhoneDisplayStocks.second(prefs),status,
+                    currentPeriod);
             requestFrame();
         });
         rates=new PhoneSamplingRate(context,prefs,hz -> {
@@ -61,6 +78,7 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
         applyTheme();
         view.refreshChartOptions();
         configure();
+        if (PhoneLiveSchedule.displayHours(context,clock.get())) PhoneLiveTradingDay.refresh(context, () -> { if (active) configure(); });
     }
 
     void hide() {
@@ -84,7 +102,7 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
 
     @Override public void onSharedPreferenceChanged(SharedPreferences changed, String key) {
         if (!active) return;
-        if (key == null || "lock_theme".equals(key)) {
+        if (key == null || "lock_theme".equals(key) || PhoneCandleView.LOCK_BACKGROUND_LIFT.equals(key)) {
             applyTheme();
             requestFrame();
         }
@@ -94,6 +112,8 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
         }
         if (key == null || "symbol".equals(key) || "paused".equals(key)
                 || "first_chart_mode".equals(key) || "chart_mode".equals(key) || "second_symbol".equals(key) || "second_chart_mode".equals(key)
+                || key.startsWith("accepted_signals_") || PhoneDisplayWindow.AUTOMATIC.equals(key)
+                || "live_calendar_date".equals(key) || "live_calendar_open".equals(key)
                 || "show_depth".equals(key) || "show_signals".equals(key) || "mcp_url".equals(key) || "mcp_key_iv".equals(key) || "mcp_key_cipher".equals(key)) {
             handler.removeCallbacks(refresh);
             handler.post(refresh);
@@ -106,14 +126,21 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
 
     private void configure() {
         if (!active) return;
+        if (PhoneLiveSchedule.displayHours(context,clock.get())) PhoneLiveTradingDay.refresh(context, null);
         symbol = prefs.getString("symbol", "sz000063");
         int rate = rates.current();
         view.setRefreshState(rate,prefs.getBoolean("paused",false));
-        view.setUpperPeriod(PhoneDisplayStocks.firstMode(prefs));
-        feed.start(symbol,PhoneDisplayStocks.firstMode(prefs),rate);
+        java.time.LocalDateTime now = clock.get();
+        String period = PhoneLiveSchedule.displayPeriod(context, now);
+        currentPeriod = period;
+        view.setUpperPeriod(period);
+        boolean offline = !PhoneLiveSchedule.displayHours(context,now) || PhoneLiveTradingDay.closed(context);
+        feed.start(symbol,period,rate,false,offline);
         String second = PhoneDisplayStocks.second(prefs);
         if (second.isEmpty()) view.setLowerMarket(null,"","");
-        lowerFeed.start(second,PhoneDisplayStocks.mode(prefs),rate);
+        lowerFeed.start(second,period,rate,false,offline);
+        handler.removeCallbacks(refresh);
+        handler.postDelayed(refresh, 60_050L - now.getSecond() * 1000L - now.getNano() / 1_000_000L);
         requestFrame();
     }
 
@@ -146,6 +173,10 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
         out.println("  market active=" + active + " rateHz=" + rates.current()
                 + " depthSent=" + counts.depthSentTotal + " depthOk=" + counts.depthOkTotal
                 + " tradesSent=" + counts.tradeSentTotal + " paintedAtUptimeMs=" + paintedAt);
+        PhoneQuoteSession.RateSample lowerCounts = lowerFeed.sample();
+        out.println("  stocks upper=" + symbol + " lower=" + PhoneDisplayStocks.second(prefs)
+                + " period=" + currentPeriod + " lowerDepthSent=" + lowerCounts.depthSentTotal
+                + " lowerDepthOk=" + lowerCounts.depthOkTotal);
         if (active) out.println("  frame=" + view.getContentDescription());
     }
 }

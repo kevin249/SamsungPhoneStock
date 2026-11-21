@@ -2,13 +2,14 @@ plugins { id 'com.android.application' }
 
 android {
     namespace 'com.kevin.watchmcp'
+    sourceSets.main.java.srcDir '../shared/src/main/java'
     compileSdk 34
     defaultConfig {
         applicationId 'com.kevin.watchmcp'
         minSdk 30
         targetSdk 34
-        versionCode 12
-        versionName '0.6.6'
+        versionCode 13
+        versionName '0.6.7'
         testInstrumentationRunner 'com.kevin.watchmcp.DirectClientInstrumentation'
     }
     compileOptions {

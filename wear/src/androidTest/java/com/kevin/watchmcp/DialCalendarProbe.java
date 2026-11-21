@@ -1,5 +1,7 @@
 package com.kevin.watchmcp;
 
+import com.kevin.market.TradingCalendar;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import org.json.JSONObject;

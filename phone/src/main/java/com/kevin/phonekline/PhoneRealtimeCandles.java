@@ -17,7 +17,7 @@ final class PhoneRealtimeCandles {
     private PhoneRealtimeCandles() { }
 
     static LocalDateTime now() { return LocalDateTime.now(SHANGHAI); }
-    static boolean tradingWindowNow() { return tradingMinute(now()); }
+    static boolean tradingWindowNow() { return PhoneLiveSchedule.marketHours(now()); }
 
     static boolean tradingMinute(LocalDateTime at) {
         if (at == null || at.getDayOfWeek().getValue() >= 6) return false;
@@ -251,6 +251,22 @@ final class PhoneRealtimeCandles {
 
     static final class DepthUnavailable extends IOException {
         DepthUnavailable(String reason) { super(reason); }
+    }
+
+    static JSONObject retainBook(JSONObject previous, JSONObject incoming, Exception error, LocalDateTime now) {
+        if (error instanceof PhoneMcpClient.RpcError) {
+            int code = ((PhoneMcpClient.RpcError) error).code;
+            if (code == 401 || code == 403) return null;
+        }
+        // A rejected response says nothing about the last independently verified sample.
+        // Keep its original timestamp through transient failures, never renew its lifetime.
+        JSONObject selected = previous;
+        if (error == null && incoming != null && (previous == null
+                || incoming.optString("source_at").compareTo(previous.optString("source_at")) >= 0)) selected = incoming;
+        LocalDateTime at = selected == null ? null : localTime(selected.optString("source_at"));
+        if (at == null || at.isAfter(now.plusSeconds(5))) return null;
+        if ((tradingMinute(now) || error != null) && at.isBefore(now.minusSeconds(30))) return null;
+        return selected;
     }
 
     static JSONObject book(JSONObject data, String symbol, LocalDateTime now) throws Exception {

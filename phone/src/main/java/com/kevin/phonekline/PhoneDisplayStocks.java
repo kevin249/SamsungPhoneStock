@@ -2,7 +2,7 @@ package com.kevin.phonekline;
 
 import android.content.SharedPreferences;
 
-/** The first symbol also serves AOD; the optional second is only for full-screen displays. */
+/** Shared upper/lower selection for widgets, live wallpapers and charging screensavers. */
 final class PhoneDisplayStocks {
     static String second(SharedPreferences prefs) {
         String value = PhoneRealtimeCandles.normalize(prefs.getString("second_symbol", ""));

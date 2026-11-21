@@ -8,7 +8,6 @@ import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.View;
@@ -21,6 +20,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
 final class PhoneWidgetRenderer {
+    // New layouts sort after shipped resources, preserving their IDs for cached LockStar hosts.
+    // The new single layout also forces reinflation after child IDs change in this upgrade.
     private static final DateTimeFormatter MARKET_TIME = DateTimeFormatter.ofPattern("MM-dd HH:mm:ss", Locale.CHINA);
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.CHINA);
 
@@ -41,12 +42,52 @@ final class PhoneWidgetRenderer {
     }
 
     static RemoteViews render(Context context, int widgetId, JSONObject snapshot, int width, int height) {
+        return render(context, widgetId, snapshot, width, height, PhoneLiveSchedule.displayPeriod(context));
+    }
+
+    static RemoteViews render(Context context, int widgetId, JSONObject snapshot, int width, int height, String period) {
         SharedPreferences prefs = context.getSharedPreferences("phone_dial", Context.MODE_PRIVATE);
-        String symbol = PhoneRealtimeCandles.normalize(prefs.getString("symbol", "sz000063"));
+        String upper = PhoneRealtimeCandles.normalize(prefs.getString("symbol", "sz000063"));
+        if (upper.isEmpty()) upper = "sz000063";
+        String lower = PhoneDisplayStocks.second(prefs);
+        if (lower.isEmpty()) return renderStock(context,widgetId,snapshot,width,height,period,upper,false);
+        return renderDual(context,widgetId,snapshot,PhoneMarketWidgetProvider.latest(context,lower),width,height,period);
+    }
+
+    static RemoteViews renderDual(Context context, int widgetId, JSONObject upper, JSONObject lower,
+                                  int width, int height, String period) {
+        SharedPreferences prefs = context.getSharedPreferences("phone_dial", Context.MODE_PRIVATE);
+        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.phone_market_widget_zdual);
+        int panelHeight = Math.max(1,(height-1)/2);
+        views.removeAllViews(R.id.widget_upper_slot);
+        views.removeAllViews(R.id.widget_lower_slot);
+        views.addView(R.id.widget_upper_slot,renderStock(context,widgetId,upper,width,panelHeight,period,
+                prefs.getString("symbol","sz000063"),true));
+        views.addView(R.id.widget_lower_slot,renderStock(context,widgetId,lower,width,panelHeight,period,
+                PhoneDisplayStocks.second(prefs),true));
+        return views;
+    }
+
+    private static RemoteViews renderStock(Context context, int widgetId, JSONObject snapshot, int width, int height,
+                                          String period, String selected, boolean dual) {
+        SharedPreferences prefs = context.getSharedPreferences("phone_dial", Context.MODE_PRIVATE);
+        String symbol = PhoneRealtimeCandles.normalize(selected);
         if (symbol.isEmpty()) symbol = "sz000063";
         if (snapshot != null && !symbol.equals(PhoneRealtimeCandles.normalize(snapshot.optString("symbol")))) snapshot = null;
-        String period = snapshot != null && "1d".equals(snapshot.optString("period"))
-                ? "1d" : prefs.getString("chart_mode", "1m");
+        if ("1d".equals(period)) {
+            try {
+                JSONObject history = new JSONObject(prefs.getString("daily_snapshot_" + symbol, "{}"));
+                snapshot = symbol.equals(history.optString("symbol"))
+                        ? PhoneDailyCandles.merge(history, snapshot) : null;
+            } catch (Exception unavailable) { snapshot = null; }
+            if (snapshot == null) {
+                snapshot = new JSONObject();
+                try { snapshot.put("symbol", symbol).put("period", "1d"); }
+                catch (org.json.JSONException ignored) { }
+            }
+        }
+        PhoneSignalStore.migrate(prefs,symbol);
+        snapshot = PhoneSignalStore.restore(prefs,snapshot);
         PhoneChartOptions chartOptions = new PhoneChartOptions(prefs, period);
         PhoneMarketPlot plot = chartOptions.buildWidget(snapshot);
         String overlays = chartOptions.overlays(plot);
@@ -62,7 +103,7 @@ final class PhoneWidgetRenderer {
         String price = PhoneMarketPlot.format(last);
         double change = (last / positive(snapshot, "previous") - 1) * 100;
         double dayHigh = positive(snapshot, "high"), dayLow = positive(snapshot, "low");
-        boolean compact = width < 205 || height < 125;
+        boolean compact = dual || width < 205 || height < 125;
         String stamp = freshness(snapshot, priced, hasPoints, plot.hasBook(), compact, chartOptions.title());
         if (prefs.getBoolean("paused", false)) stamp = "已暂停 · " + stamp;
 
@@ -81,7 +122,12 @@ final class PhoneWidgetRenderer {
         int chartHeight = height - 2 * padding - headerHeight - (int)Math.ceil(lines * lineSize * 1.3);
         boolean showChart = (hasPoints || Double.isFinite(dayHigh) || Double.isFinite(dayLow)) && innerWidth >= 90 && chartHeight >= 21;
 
-        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.phone_market_widget_v3);
+        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.phone_market_widget_zsingle);
+        views.setInt(R.id.widget_root, "setBackgroundColor", PhoneMarketPlot.WIDGET_BACKGROUND);
+        for (int id : new int[]{R.id.widget_price, R.id.widget_name, R.id.widget_code,
+                R.id.widget_change, R.id.widget_chart_legend, R.id.widget_stamp}) {
+            views.setTextColor(id, PhoneMarketPlot.WIDGET_TEXT);
+        }
         float density = context.getResources().getDisplayMetrics().density;
         int inset = Math.round(padding * density);
         views.setViewPadding(R.id.widget_root, inset, inset, inset, inset);
@@ -96,7 +142,7 @@ final class PhoneWidgetRenderer {
         views.setTextViewText(R.id.widget_code, code);
         show(views, R.id.widget_code, !name.isEmpty() && innerWidth >= 205);
         views.setTextViewText(R.id.widget_change, Double.isFinite(change) ? String.format(Locale.ROOT, "%+.2f%%", change) : "");
-        views.setTextColor(R.id.widget_change, change > 0 ? PhoneMarketPlot.WIDGET_UP : change < 0 ? PhoneMarketPlot.WIDGET_DOWN : Color.WHITE);
+        views.setTextColor(R.id.widget_change, change > 0 ? PhoneMarketPlot.WIDGET_UP : change < 0 ? PhoneMarketPlot.WIDGET_DOWN : PhoneMarketPlot.WIDGET_TEXT);
         show(views, R.id.widget_change, Double.isFinite(change));
         views.setTextViewText(R.id.widget_chart_legend, chartDescription);
         show(views, R.id.widget_chart_legend, showChart && showLegend);
@@ -123,10 +169,10 @@ final class PhoneWidgetRenderer {
         float scale = Math.min(widthDp * density / designWidth, (float)Math.sqrt(400_000.0 / designWidth / designHeight));
         int pixelsWide = Math.max(1, Math.round(designWidth * scale));
         int pixelsHigh = Math.max(1, Math.round(designHeight * scale));
-        Bitmap bitmap = Bitmap.createBitmap(pixelsWide, pixelsHigh, Bitmap.Config.RGB_565);
+        Bitmap bitmap = Bitmap.createBitmap(pixelsWide, pixelsHigh, Bitmap.Config.ARGB_8888);
         bitmap.setDensity(Bitmap.DENSITY_NONE);
         Canvas canvas = new Canvas(bitmap);
-        canvas.drawColor(Color.BLACK);
+        // Keep untouched ARGB pixels transparent so LockStar's wallpaper shows through.
         canvas.scale(pixelsWide / (float)designWidth, pixelsHigh / (float)designHeight);
         plot.drawWidget(canvas, 0, 0, designWidth - 1, designHeight - 1);
         return bitmap;

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>息屏 K 线 · 交易终端主题预览</title>
+<style>
+:root { color-scheme: dark; font-family: "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #101411; color: #e8eee9; }
+.page { max-width: 1240px; margin: auto; padding: 48px 28px 70px; }
+h1 { margin: 0 0 8px; font-size: clamp(25px, 3vw, 38px); font-weight: 600; letter-spacing: .02em; }
+.intro { margin: 0 0 34px; color: #a6b3aa; font-size: 15px; line-height: 1.7; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; }
+.option { min-width: 0; }
+.option h2 { margin: 0 0 4px; font-size: 20px; font-weight: 600; }
+.option p { margin: 0 0 18px; min-height: 42px; color: #a6b3aa; font-size: 13px; line-height: 1.6; }
+.phone { position: relative; width: min(100%, 330px); aspect-ratio: 330 / 698; margin: auto; border: 5px solid #39423c; border-radius: 35px; overflow: hidden; box-shadow: 0 18px 56px #0009, inset 0 0 0 1px #626d63; }
+.phone:before { content: ""; position: absolute; left: 40%; top: 7px; width: 20%; height: 13px; border-radius: 0 0 11px 11px; background: #222823; z-index: 2; }
+.screen { height: 100%; padding: 31px 21px 22px; display: flex; flex-direction: column; }
+.topline { font-size: 10px; letter-spacing: .22em; font-weight: 700; }
+.time { font-variant-numeric: tabular-nums; font-family: "Segoe UI", sans-serif; font-weight: 300; letter-spacing: -.045em; }
+.stock { font-size: 17px; font-weight: 600; }
+.code { font-size: 10px; letter-spacing: .14em; }
+.price { font-size: 36px; font-family: "Segoe UI", sans-serif; font-weight: 300; letter-spacing: -.035em; }
+.change { font: 600 13px "Segoe UI", sans-serif; }
+.plot { width: 100%; display: block; overflow: visible; }
+.meta { display: flex; justify-content: space-between; font-size: 10px; letter-spacing: .04em; }
+.demo-controls { margin-top: auto; display: flex; gap: 8px; }
+.demo-controls button { min-height: 48px; border-radius: 12px; border: 1px solid currentColor; padding: 0 10px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.demo-controls button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.demo-controls .pause { flex: 1; }
+.demo-controls .rate { width: 84px; }
+.paused .chart-zone, .paused .price-zone { opacity: .13; }
+.paused .pause { background: #dce7da; color: #101812; }
+.c { background: #0b1217; color: #e5f0ee; }
+.c .topline { color: #6ad4ab; }
+.c .header { margin-top: 18px; display: flex; align-items: start; justify-content: space-between; }
+.c .time { font-size: 38px; }
+.c .live { border: 1px solid #34755d; border-radius: 5px; padding: 5px 7px; color: #7ae1b4; font: 600 9px "Segoe UI", sans-serif; letter-spacing: .12em; }
+.c .stock-line { display: flex; align-items: baseline; justify-content: space-between; margin-top: 25px; }
+.c .code { color: #809d98; }
+.c .price-zone { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2px; }
+.c .change { color: #ff827d; }
+.c .chart-zone { margin-top: 16px; border-top: 1px solid #34505a; border-bottom: 1px solid #34505a; padding: 22px 0; }
+.c .plot { height: 220px; }
+.c .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 23px; }
+.c .stats div { border-left: 2px solid #365d55; padding-left: 9px; }
+.c .stats small { display: block; color: #8ba39e; font-size: 10px; }
+.c .stats strong { font: 500 15px "Segoe UI", sans-serif; }
+.c .meta { margin-top: 24px; color: #8ba39e; }
+.c .demo-controls button { border-color: #365d55; }
+.note { margin-top: 30px; color: #a6b3aa; font-size: 12px; line-height: 1.7; }
+@media (max-width: 1050px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px) { .page { padding: 25px 16px 45px; } .grid { grid-template-columns: 1fr; gap: 42px; } .option p { min-height: 0; } }
+@media (prefers-reduced-motion: reduce) { *, *:before { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<main class="page"><h1>深色交易终端</h1><p class="intro">03 为原版。04 至 13 为十张新设计稿，点图可查看原尺寸。行情为示例。</p><div class="grid"><section class="option"><h2>03 · 深色交易终端</h2><p>更大的 K 线区，强调实时状态和涨跌数据，适合边工作边看盘。</p>
+      <div class="phone"><div class="screen c"><div class="topline">MARKET MONITOR / LIVE</div><div class="header"><div class="time">09:34<span style="font-size:.57em">:26</span></div><div class="live">● LIVE TRADE</div></div>
+        <div class="stock-line"><div class="stock">贵州茅台</div><div class="code">SH 600519</div></div>
+        <div class="price-zone"><div class="price">1,823.46</div><div class="change">+1.92%</div></div>
+        <div class="chart-zone"><svg class="plot candles" data-theme="c" viewBox="0 0 280 220" aria-label="示例一分钟 K 线"></svg></div>
+        <div class="stats"><div><small>今日最高</small><strong>1,828.80</strong></div><div><small>今日最低</small><strong>1,806.12</strong></div></div>
+        <div class="meta"><span>1 MIN · 48 根</span><span>MCP 成交 09:34:26</span></div>
+        <div class="demo-controls"><button class="rate" type="button">10 次/秒</button><button class="pause" type="button">暂停显示</button></div>
+      </div></div></section><section class="option"><h2>04 · 全幅行情</h2><a href="terminal/04.png"><img style="width:min(100%,330px);display:block;margin:18px auto" src="terminal/04.png" alt="全幅行情主题原图"></a></section><section class="option"><h2>05 · 大字报价</h2><a href="terminal/05.png"><img style="width:min(100%,330px);display:block;margin:18px auto" src="terminal/05.png" alt="大字报价主题原图"></a></section><section class="option"><h2>06 · 右侧价阶</h2><a href="terminal/06.png"><img style="width:min(100%,330px);display:block;margin:18px auto" src="terminal/06.png" alt="右侧价阶主题原图"></a></section><section class="option"><h2>07 · 双窗放大</h2><a href="terminal/07.png"><img style="width:min(100%,330px);display:block;margin:18px auto" src="terminal/07.png" alt="双窗放大主题原图"></a></section><section class="option"><h2>08 · 逐笔流水</h2><a href="terminal/08.png"><img style="width:min(100%,330px);display:block;margin:18px auto" src="terminal/08.png" alt="逐笔流水主题原图"></a></section><section class="option"><h2>09 · 时钟优先</h2><a href="terminal/09.png"><img style="width:min(100%,330px);display:block;margin:18px auto" src="terminal/09.png" alt="时钟优先主题原图"></a></section><section class="option"><h2>10 · 量价同屏</h2><a href="terminal/10.png"><img style="width:min(100%,330px);display:block;margin:18px auto" src="terminal/10.png" alt="量价同屏主题原图"></a></section><section class="option"><h2>11 · 日内区间</h2><a href="terminal/11.png"><img style="width:min(100%,330px);display:block;margin:18px auto" src="terminal/11.png" alt="日内区间主题原图"></a></section><section class="option"><h2>12 · 四价面板</h2><a href="terminal/12.png"><img style="width:min(100%,330px);display:block;margin:18px auto" src="terminal/12.png" alt="四价面板主题原图"></a></section><section class="option"><h2>13 · 底部报价</h2><a href="terminal/13.png"><img style="width:min(100%,330px);display:block;margin:18px auto" src="terminal/13.png" alt="底部报价主题原图"></a></section></div></main><script>
+const svgNS = 'http://www.w3.org/2000/svg';
+function el(name, attrs) { const n = document.createElementNS(svgNS, name); for (const [k,v] of Object.entries(attrs)) n.setAttribute(k,v); return n; }
+document.querySelectorAll('.candles').forEach(svg => {
+  const b = svg.viewBox.baseVal, w = b.width, h = b.height, n = svg.dataset.theme === 'b' ? 20 : 28;
+  const up = svg.dataset.theme === 'b' ? '#ef9389' : '#ff8178';
+  const down = svg.dataset.theme === 'b' ? '#83c79d' : '#6acb91';
+  const grid = svg.dataset.theme === 'c' ? '#28414b' : '#30443a';
+  [0.2,0.5,0.8].forEach(p => svg.append(el('line', {x1:0,y1:h*p,x2:w,y2:h*p,stroke:grid,'stroke-width':1,'stroke-dasharray':'3 5'})));
+  let last = .24;
+  for (let i=0;i<n;i++) {
+    const o=last;
+    const c=Math.max(.13,Math.min(.84,.25+i*.014+Math.sin(i*.72)*.085+Math.cos(i*1.83)*.052)); last=c;
+    const hi=Math.min(.91,Math.max(o,c)+.025+(i%4)*.007), lo=Math.max(.08,Math.min(o,c)-.026-(i%3)*.009);
+    const x=(i+.5)*w/n, y=v => h*(.95-v*.86), color=c>=o?up:down;
+    svg.append(el('line',{x1:x,y1:y(hi),x2:x,y2:y(lo),stroke:color,'stroke-width':1.4}));
+    svg.append(el('rect',{x:x-w/n*.25,y:Math.min(y(o),y(c)),width:w/n*.5,height:Math.max(2,Math.abs(y(o)-y(c))),fill:color,rx:.7}));
+  }
+});
+document.querySelectorAll('.phone').forEach(phone => {
+  const rates=[1,2,5,10]; let rate=3;
+  phone.querySelector('.rate').addEventListener('click', e => { rate=(rate+1)%rates.length; e.currentTarget.textContent=rates[rate]+' 次/秒'; });
+  phone.querySelector('.pause').addEventListener('click', e => { const paused=phone.classList.toggle('paused'); e.currentTarget.textContent=paused?'继续显示':'暂停显示'; });
+});
+</script>
+</body>
+</html>

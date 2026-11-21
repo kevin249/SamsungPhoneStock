@@ -110,7 +110,7 @@ final class PhoneQuoteSession {
         return new RateSample(counts);
     }
 
-    private enum Lane { PUBLIC, HISTORY, TRADE, SNAPSHOT, DEPTH, SIGNAL }
+    private enum Lane { PUBLIC, HISTORY, TRADE, SNAPSHOT, DEPTH, SIGNAL, SIGNAL_HISTORY }
 
     private static final class Feed {
         private static final DateTimeFormatter RECEIPT_CLOCK = DateTimeFormatter
@@ -123,7 +123,9 @@ final class PhoneQuoteSession {
         final EnumMap<Lane,PhoneMcpClient> clients=new EnumMap<>(Lane.class);
         final PhoneMarketClient market=new PhoneMarketClient();
         volatile boolean active=true;
-        JSONObject chart, lastBook, notificationBuffer, reference;
+        JSONObject chart, lastBook, notificationBuffer, signalHistoryBuffer, reference;
+        JSONArray signalMarks = new JSONArray();
+        volatile String signalDate;
         String bookReceived = "";
         String tickStatus="", depthIssue="", deliveredStatus="";
         boolean publicUnavailable;
@@ -131,6 +133,9 @@ final class PhoneQuoteSession {
         Feed(String symbol,String url,String key,PhoneMarketDemand demand,JSONObject restore,PhoneMarketSampler.Run run) {
             this.symbol=symbol; this.url=url; this.key=key;
             chart=initial(restore);
+            signalDate=chart.optString("date",PhoneRealtimeCandles.now().toLocalDate().toString());
+            try { signalMarks=PhoneSignalHistory.merge(signalDate,null,chart.optJSONArray("fills")); }
+            catch (Exception invalid) { signalMarks=new JSONArray(); }
             depthIssue=url.isEmpty()?"盘口待配置":"盘口连接中";
             try { chart.put("book_status",depthIssue); } catch (org.json.JSONException ignored) { }
             net=new ScheduledThreadPoolExecutor(url.isEmpty()?1:Lane.values().length);
@@ -156,6 +161,7 @@ final class PhoneQuoteSession {
                             saved.getJSONArray("bars"),PhoneRealtimeCandles.now());
                     if (restored.optString("date").equals(saved.optString("date"))) {
                         PhoneRealtimeCandles.references(restored,saved.optDouble("previous"),saved.optDouble("high"),saved.optDouble("low"));
+                        restored.put("fills",PhoneSignalHistory.merge(restored.optString("date"),null,saved.optJSONArray("fills")));
                         LocalDateTime tick=PhoneRealtimeCandles.localTime(saved.optString("quote_at"));
                         if (tick!=null && tick.toLocalDate().toString().equals(restored.optString("date"))
                                 && !tick.isAfter(PhoneRealtimeCandles.now())) restored.put("quote_at",PhoneRealtimeCandles.STAMP.format(tick));
@@ -209,6 +215,7 @@ final class PhoneQuoteSession {
         long interval(Lane lane,boolean trading) {
             switch(lane) {
                 case SIGNAL: return trading?5000:60000;
+                case SIGNAL_HISTORY: return trading?30000:60000;
                 case PUBLIC: return trading?20000:180000;
                 default: return trading?20000:180000;
             }
@@ -240,6 +247,8 @@ final class PhoneQuoteSession {
                     return PhoneMarketClient.tdxHistory(symbol,result.getJSONArray("bars"),requested);
                 case SNAPSHOT: return client.call("get_tdx_snapshot",args).getJSONObject("snapshot");
                 case SIGNAL: return client.notifications();
+                case SIGNAL_HISTORY: return client.call("get_volatility_bs",args
+                        .put("trade_date",signalDate).put("limit",1000));
                 default: throw new IllegalArgumentException("unexpected lane " + lane);
             }
         }
@@ -263,15 +272,14 @@ final class PhoneQuoteSession {
                     if (result!=null) chart=PhoneRealtimeCandles.mergeHistory(chart,result);
                 } else if (lane==Lane.DEPTH) {
                     depthIssue=depthError(error,forbidden);
-                    // A denied/invalid book must disappear. A transport hiccup can
-                    // still use the previous timestamped sample within its lifetime.
-                    if (forbidden || error instanceof PhoneRealtimeCandles.DepthUnavailable) lastBook=null;
-                    else if (result!=null && (lastBook==null || result.optString("source_at").compareTo(lastBook.optString("source_at"))>=0)) {
-                        lastBook=result;
+                    lastBook=PhoneRealtimeCandles.retainBook(lastBook,result,error,PhoneRealtimeCandles.now());
+                    if (error==null && result!=null && lastBook==result) {
                         bookReceived=RECEIPT_CLOCK.format(Instant.ofEpochMilli(receivedAt));
                     }
                 } else if (lane==Lane.SIGNAL) {
-                    notificationBuffer=result;
+                    if (result!=null) notificationBuffer=result;
+                } else if (lane==Lane.SIGNAL_HISTORY) {
+                    if (result!=null) signalHistoryBuffer=result;
                 } else if (lane==Lane.SNAPSHOT) reference=result;
                 if (reference!=null && (lane==Lane.SNAPSHOT || !old.optString("date").equals(chart.optString("date"))))
                     chart=PhoneRealtimeCandles.snapshot(chart,reference);
@@ -288,11 +296,16 @@ final class PhoneQuoteSession {
                     chart=PhoneRealtimeCandles.copy(chart);
                     chart.put("book",book).put("book_status",depthStatus);
                 }
-                if (lane==Lane.SIGNAL || !old.optString("date").equals(chart.optString("date"))) {
-                    JSONArray fills=notificationBuffer==null?null:PhoneRealtimeCandles.signals(notificationBuffer,symbol,chart.optString("date"));
-                    if (fills!=null || chart.has("fills")) {
+                String date=chart.optString("date");
+                if (!date.isEmpty()) signalDate=date;
+                if (lane==Lane.SIGNAL || lane==Lane.SIGNAL_HISTORY || !old.optString("date").equals(date)) {
+                    JSONArray incoming=notificationBuffer==null?null:PhoneRealtimeCandles.signals(notificationBuffer,symbol,date);
+                    signalMarks=PhoneSignalHistory.merge(date,signalMarks,incoming);
+                    if (signalHistoryBuffer!=null)
+                        signalMarks=PhoneSignalHistory.merge(date,signalMarks,PhoneSignalHistory.read(signalHistoryBuffer,symbol,date));
+                    if (!signalMarks.toString().equals(chart.optJSONArray("fills")==null?"[]":chart.optJSONArray("fills").toString())) {
                         chart=PhoneRealtimeCandles.copy(chart);
-                        chart.put("fills",fills);
+                        chart.put("fills",signalMarks);
                     }
                 }
             } catch(Exception malformed) { error=malformed; }

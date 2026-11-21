@@ -1,5 +1,7 @@
 package com.kevin.watchmcp;
 
+import com.kevin.market.TradingCalendar;
+
 import org.junit.Test;
 import java.time.LocalDate;
 import java.util.Arrays;

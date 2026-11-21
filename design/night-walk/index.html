@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark"><title>城市夜游 · 手机息屏</title><style>
+*{box-sizing:border-box}body{margin:0;background:#242524;color:#efefe9;font:16px/1.55 system-ui,"Microsoft YaHei",sans-serif}
+main{max-width:1460px;margin:auto;padding:clamp(18px,4vw,48px)}header{display:flex;gap:18px;justify-content:space-between;align-items:end;flex-wrap:wrap;margin-bottom:34px}
+h1{font-size:clamp(26px,4vw,42px);line-height:1.2;margin:0 0 7px}p{margin:0;color:#bec1ba}
+.dl,button{border:1px solid #686a63;background:transparent;color:#eeeee6;padding:10px 17px;border-radius:30px;font:inherit;text-decoration:none;min-height:44px;cursor:pointer}
+section{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:32px clamp(15px,2.6vw,36px)}
+figure{margin:0}.shot{display:block;overflow:hidden;background:black;outline:1px solid #5e605b;border-radius:18px}
+.shot img{width:100%;height:auto;display:block}figcaption{margin-top:9px;font-size:18px;font-weight:600}figcaption span{font:15px consolas,monospace;color:#b4b7b0;margin-right:12px}
+a:focus-visible,button:focus-visible{outline:3px solid #dedccc;outline-offset:4px}
+dialog{max-width:100vw;max-height:100dvh;background:#171817;color:inherit;border:1px solid #545650;border-radius:18px;padding:12px;overflow:auto}
+dialog::backdrop{background:#000d}dialog img{display:block;max-width:calc(100vw - 42px);height:auto;max-height:calc(100dvh - 122px);object-fit:contain;margin:auto}
+footer{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding-top:10px}
+footer b{min-width:104px;text-align:center}footer button{padding:7px 12px}
+@media(max-width:1040px){section{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px){section{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){section{grid-template-columns:minmax(0,1fr)}}
+</style></head><body><main><header><div><h1>城市夜游 · 手机息屏</h1><p>1080 × 2340 · 模拟行情 · 每秒更新 5 次的静态预览</p></div>
+<a class="dl" href="94-103-originals.zip" download>下载 10 张原图</a></header><section><figure><a class="shot" href="94.png" aria-label="放大94号末班电车"><img width="1080" height="2340" loading="lazy" src="94.png" alt="末班电车手机息屏"></a><figcaption><span>94</span>末班电车</figcaption></figure><figure><a class="shot" href="95.png" aria-label="放大95号深夜书店"><img width="1080" height="2340" loading="lazy" src="95.png" alt="深夜书店手机息屏"></a><figcaption><span>95</span>深夜书店</figcaption></figure><figure><a class="shot" href="96.png" aria-label="放大96号雨停便利店"><img width="1080" height="2340" loading="lazy" src="96.png" alt="雨停便利店手机息屏"></a><figcaption><span>96</span>雨停便利店</figcaption></figure><figure><a class="shot" href="97.png" aria-label="放大97号街角影院"><img width="1080" height="2340" loading="lazy" src="97.png" alt="街角影院手机息屏"></a><figcaption><span>97</span>街角影院</figcaption></figure><figure><a class="shot" href="98.png" aria-label="放大98号夜渡"><img width="1080" height="2340" loading="lazy" src="98.png" alt="夜渡手机息屏"></a><figcaption><span>98</span>夜渡</figcaption></figure><figure><a class="shot" href="99.png" aria-label="放大99号天台"><img width="1080" height="2340" loading="lazy" src="99.png" alt="天台手机息屏"></a><figcaption><span>99</span>天台</figcaption></figure><figure><a class="shot" href="100.png" aria-label="放大100号桥影"><img width="1080" height="2340" loading="lazy" src="100.png" alt="桥影手机息屏"></a><figcaption><span>100</span>桥影</figcaption></figure><figure><a class="shot" href="101.png" aria-label="放大101号面摊"><img width="1080" height="2340" loading="lazy" src="101.png" alt="面摊手机息屏"></a><figcaption><span>101</span>面摊</figcaption></figure><figure><a class="shot" href="102.png" aria-label="放大102号跨江索道"><img width="1080" height="2340" loading="lazy" src="102.png" alt="跨江索道手机息屏"></a><figcaption><span>102</span>跨江索道</figcaption></figure><figure><a class="shot" href="103.png" aria-label="放大103号夜骑"><img width="1080" height="2340" loading="lazy" src="103.png" alt="夜骑手机息屏"></a><figcaption><span>103</span>夜骑</figcaption></figure></section></main><dialog aria-label="整屏预览"><img alt=""><footer>
+<button type="button" data-jump="-1" aria-label="上一张">←</button><b aria-live="polite"></b>
+<button type="button" data-jump="1" aria-label="下一张">→</button><button type="button" id="close">关闭</button>
+</footer></dialog><script>
+const shots=[...document.querySelectorAll('.shot')], popup=document.querySelector('dialog'), picture=popup.querySelector('img');
+let index=0;function show(i){index=(i+shots.length)%shots.length;const shot=shots[index], cap=shot.nextElementSibling;
+picture.src=shot.href;picture.alt=shot.firstElementChild.alt;popup.querySelector('b').textContent=cap.firstElementChild.textContent+' · '+cap.lastChild.textContent;}
+shots.forEach((shot,i)=>shot.addEventListener('click',e=>{if(typeof popup.showModal==='function'&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey){e.preventDefault();show(i);popup.showModal()}}))
+popup.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>show(index+Number(b.dataset.jump)));
+document.querySelector('#close').onclick=()=>popup.close();popup.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();show(index+(e.key==='ArrowLeft'?-1:1));}});
+</script></body></html>
