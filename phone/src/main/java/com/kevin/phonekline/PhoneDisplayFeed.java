@@ -52,6 +52,12 @@ final class PhoneDisplayFeed {
         boolean nextPaused = prefs.getBoolean("paused",false);
         if (started && this.symbol.equals(symbol) && this.mode.equals(mode) && paused == nextPaused
                 && address.equals(url) && secret.equals(key) && this.cacheOnly == cacheOnly && this.snapshotOnly == snapshotOnly) {
+            if (cacheOnly) {
+                JSONObject saved = cached("snapshot_" + symbol);
+                if (saved != null && (latest == null
+                        || saved.optString("quote_at").compareTo(latest.optString("quote_at")) > 0)) latest = saved;
+                if ("1d".equals(mode)) daily = cached("daily_snapshot_" + symbol);
+            }
             setRate(hz);
             emit();
             return;
@@ -83,6 +89,10 @@ final class PhoneDisplayFeed {
     }
 
     private JSONObject cached(String key) {
+        return cached(prefs, key, symbol);
+    }
+
+    static JSONObject cached(SharedPreferences prefs, String key, String symbol) {
         try {
             JSONObject data = new JSONObject(prefs.getString(key,"{}"));
             if (!symbol.equals(data.optString("symbol"))) return null;
@@ -91,20 +101,26 @@ final class PhoneDisplayFeed {
         } catch (Exception ignored) { return null; }
     }
 
+    static JSONObject fetchDaily(String code, PhoneMarketClient market, PhoneMcpClient remote) throws Exception {
+        if (remote != null) {
+            try {
+                JSONObject response = remote.call("get_tdx_kline",PhoneMcpClient.arguments(code)
+                        .put("period","1d").put("dividend_type","none").put("days",240).put("limit",120));
+                if (!code.equals(PhoneRealtimeCandles.normalize(response.optString("symbol")))
+                        || !response.optBoolean("available",true)) throw new java.io.IOException("日 K 不可用");
+                return PhoneDailyCandles.history(code, response.optString("name"), response.getJSONArray("bars"));
+            } catch (Exception unavailable) {
+                if (Thread.currentThread().isInterrupted()) throw unavailable;
+            }
+        }
+        return market.fetchDaily(code);
+    }
+
     private void poll(int token, String code, PhoneMarketClient market, PhoneMcpClient remote, ScheduledThreadPoolExecutor executor) {
         executor.execute(() -> {
             JSONObject result = null;
             try {
-                if (remote != null) {
-                    try {
-                        JSONObject response = remote.call("get_tdx_kline",PhoneMcpClient.arguments(code)
-                                .put("period","1d").put("dividend_type","none").put("days",240).put("limit",120));
-                        if (!code.equals(PhoneRealtimeCandles.normalize(response.optString("symbol")))
-                                || !response.optBoolean("available",true)) throw new java.io.IOException("日 K 不可用");
-                        result = PhoneDailyCandles.history(code,response.optString("name"),response.getJSONArray("bars"));
-                    } catch (Exception unavailable) { if (executor.isShutdown()) return; }
-                }
-                if (result == null) result = market.fetchDaily(code);
+                result = fetchDaily(code, market, remote);
             } catch (Exception unavailable) { /* Keep last successful daily history. */ }
             JSONObject received = result;
             main.post(() -> {

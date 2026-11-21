@@ -94,6 +94,9 @@ final class PhoneWidgetRenderer {
         String chartDescription = chartOptions.legend(plot) + (overlays.isEmpty() ? "" : " · " + overlays);
         String code = symbol.substring(2);
         String name = snapshot == null ? "" : snapshot.optString("name");
+        if (name.isEmpty() || "null".equals(name) || name.equals(code) || name.equals(symbol)) {
+            name = prefs.getString("stock_name_" + symbol, "");
+        }
         if ("null".equals(name) || name.equals(code) || name.equals(symbol)) name = "";
 
         double last = positive(snapshot, "price");

@@ -18,7 +18,7 @@
 
 ### 三星手机行情与锁屏壁纸
 
-在 Android 8.0 及以上手机上安装 [phone-kline.apk（手机 v1.19）](https://github.com/kevin249/SamsungPhoneStock/releases/download/phone-v1.19/phone-kline.apk)，打开「息屏 K 线」。可在[该版本的 Release](https://github.com/kevin249/SamsungPhoneStock/releases/tag/phone-v1.19) 下载 SHA-256 校验清单，也可按下方「开发和验证」自行构建。
+在 Android 8.0 及以上手机上安装 [phone-kline.apk（手机 v1.20）](https://github.com/kevin249/SamsungPhoneStock/releases/download/phone-v1.20/phone-kline.apk)，打开「息屏 K 线」。可在[该版本的 Release](https://github.com/kevin249/SamsungPhoneStock/releases/tag/phone-v1.20) 下载 SHA-256 校验清单，也可按下方「开发和验证」自行构建。
 
 手机支持三星息屏行情（AOD）、亮屏锁定时的动态壁纸和充电闲置时的屏保。AOD 与锁屏上的 LockStar 行情小组件、锁屏壁纸和充电屏保均支持最多两只股票，共用「行情」页的图表类型与自动切换开关。
 

@@ -142,6 +142,7 @@ final class PhoneCandleView extends View {
         plot = chartOptions.build(snapshot);
         overlayStatus = chartOptions.overlays(plot);
         name = snapshot == null ? "" : snapshot.optString("name");
+        if (name.isEmpty() || "null".equals(name)) name = preferences.getString("stock_name_" + selected, "");
         if (name.isEmpty() || "null".equals(name)) name = symbol.isEmpty() ? "待选股票" : "股票行情";
         double last = positive(snapshot, "price");
         if (!Double.isFinite(last)) last = plot.lastClose();

@@ -113,11 +113,18 @@ final class PhoneSystemDisplay implements SharedPreferences.OnSharedPreferenceCh
         if (key == null || "symbol".equals(key) || "paused".equals(key)
                 || "first_chart_mode".equals(key) || "chart_mode".equals(key) || "second_symbol".equals(key) || "second_chart_mode".equals(key)
                 || key.startsWith("accepted_signals_") || PhoneDisplayWindow.AUTOMATIC.equals(key)
+                || offlineSnapshotChanged(key)
                 || "live_calendar_date".equals(key) || "live_calendar_open".equals(key)
                 || "show_depth".equals(key) || "show_signals".equals(key) || "mcp_url".equals(key) || "mcp_key_iv".equals(key) || "mcp_key_cipher".equals(key)) {
             handler.removeCallbacks(refresh);
             handler.post(refresh);
         }
+    }
+
+    private boolean offlineSnapshotChanged(String key) {
+        if (PhoneLiveSchedule.displayHours(context, clock.get()) && !PhoneLiveTradingDay.closed(context)) return false;
+        String prefix = "1d".equals(currentPeriod) ? "daily_snapshot_" : "snapshot_";
+        return key.equals(prefix + symbol) || key.equals(prefix + PhoneDisplayStocks.second(prefs));
     }
 
     private void applyTheme() {

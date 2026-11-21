@@ -362,8 +362,11 @@ public final class PhoneDialActivity extends Activity {
         PhoneStockPicker picker=new PhoneStockPicker(this,second?PhoneDisplayStocks.second(prefs):symbol,code -> {
             String other=second?symbol:PhoneDisplayStocks.second(prefs);
             if (code.equals(other)) { toast("两只股票不能重复"); return; }
-            if (second) prefs.edit().putString("second_symbol",code).apply(); else changeSymbol(code);
-            PhoneMarketWidgetProvider.settingsChanged(this,false);
+            if (second || code.equals(symbol)) {
+                if (second) prefs.edit().putString("second_symbol", code).apply();
+                PhoneMarketWidgetProvider.settingsChanged(this, false);
+            } else changeSymbol(code);
+            PhoneStockSelectionRefresh.refresh(this, code);
             dialog.dismiss(); renderScreen();
         });
         picker.setPadding(dp(12),dp(12),dp(12),dp(12)); dialog.setView(picker); dialog.show();
@@ -764,6 +767,8 @@ public final class PhoneDialActivity extends Activity {
         updateLiveControls();
         PhoneLiveSchedule.syncFromActivity(this);
         restartFeed();
+        PhoneStockSelectionRefresh.refresh(this, symbol);
+        PhoneStockSelectionRefresh.refresh(this, PhoneDisplayStocks.second(prefs));
         if (previewDisplay!=null) previewDisplay.show();
         ui.removeCallbacks(showRates);
         ui.post(showRates);

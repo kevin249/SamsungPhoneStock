@@ -49,6 +49,21 @@ final class PhoneDualWidgetInstrumentation {
                 }
             }
         }
+        View afterClose = PhoneWidgetRenderer.renderDual(context, -1, upper, lower, 315, 400, "1d")
+                .apply(host, new FrameLayout(host));
+        prefs.edit().putString("second_symbol", "sz300223").putString("stock_name_sz300223", "北京君正")
+                .remove("daily_snapshot_sz300223").commit();
+        PhoneWidgetRenderer.renderDual(context, -1, upper, lower, 315, 400, "1d").reapply(host, afterClose);
+        String loading = description(afterClose.findViewById(R.id.widget_lower_slot));
+        require(loading.contains("北京君正 300223") && loading.contains("现价 —") && !loading.contains("000063"),
+                "switching an uncached daily stock replaces the previous stock immediately");
+        JSONObject selected = PhoneDualChartInstrumentation.fixture("sz300223", true).put("name", "北京君正");
+        prefs.edit().putString("daily_snapshot_sz300223", selected.toString()).commit();
+        PhoneWidgetRenderer.renderDual(context, -1, upper, null, 315, 400, "1d").reapply(host, afterClose);
+        View saved = afterClose.findViewById(R.id.widget_lower_slot);
+        require(description(saved).contains("北京君正 300223") && !description(saved).contains("现价 —"),
+                "the new daily cache fills the selected panel");
+        require(plot(saved) != null, "selected daily chart appears after caching");
         prefs.edit().remove("second_symbol").commit();
         require(PhoneWidgetRenderer.render(context,-1,upper,280,285,"realtime").getLayoutId()==R.layout.phone_market_widget_zsingle,
                 "removing second stock restores single widget layout");
