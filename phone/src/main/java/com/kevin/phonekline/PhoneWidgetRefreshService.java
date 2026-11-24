@@ -71,17 +71,17 @@ public final class PhoneWidgetRefreshService extends JobService {
     }
 
     private static final class Selection {
-        final String symbol, second, address, cipher, iv;
-        Selection(SharedPreferences prefs) {
-            symbol = PhoneRealtimeCandles.normalize(prefs.getString("symbol", "sz000063"));
-            second = PhoneDisplayStocks.second(prefs);
+        final java.util.Set<String> symbols, minis;
+        final String address, cipher, iv;
+        Selection(Context context, SharedPreferences prefs) {
+            symbols = PhoneMarketWidgetProvider.visibleStocks(context);
+            minis = PhoneDisplayStocks.minis(prefs);
             address = prefs.getString("mcp_url", "");
             cipher = prefs.getString("mcp_key_cipher", "");
             iv = prefs.getString("mcp_key_iv", "");
         }
         boolean current(SharedPreferences prefs) {
-            return symbol.equals(PhoneRealtimeCandles.normalize(prefs.getString("symbol", "sz000063")))
-                    && second.equals(PhoneDisplayStocks.second(prefs))
+            return minis.equals(PhoneDisplayStocks.minis(prefs))
                     && address.equals(prefs.getString("mcp_url", ""))
                     && cipher.equals(prefs.getString("mcp_key_cipher", ""))
                     && iv.equals(prefs.getString("mcp_key_iv", ""));
@@ -94,7 +94,10 @@ public final class PhoneWidgetRefreshService extends JobService {
     private final Runnable begin = this::beginWindow;
     private final SharedPreferences.OnSharedPreferenceChangeListener changed = (prefs, key) -> {
         if (jobs.isEmpty()) return;
-        if (key == null || key.equals("paused") || key.equals("symbol") || key.equals("second_symbol") || key.equals("mcp_url")
+        if (key == null || key.equals("paused") || key.equals("symbol") || key.equals("second_symbol") || key.equals(PhoneDisplayStocks.ORDER)
+                || key.equals(PhoneDisplayStocks.MINI) || key.startsWith(PhoneWidgetRenderer.PAGE)
+                || key.startsWith(PhoneDisplayStocks.HEIGHT_PREFIX)
+                || key.equals(PhoneDisplayWindow.MODE) || key.equals(PhoneDisplayWindow.AUTOMATIC) || key.equals("mcp_url")
                 || key.equals("mcp_key_cipher") || key.equals("mcp_key_iv")) {
             // A saved URL and its encrypted credential may update in separate preference events.
             releaseSession();
@@ -103,15 +106,15 @@ public final class PhoneWidgetRefreshService extends JobService {
         }
     };
     private SharedPreferences prefs;
-    private PhoneDisplayFeed session, lowerSession;
+    private final Map<String, PhoneDisplayFeed> sessions = new LinkedHashMap<>();
     private Selection selection;
-    private JSONObject pending, lowerPending;
-    private String lastStatus, lowerStatus;
-    private JSONObject lastSnapshot, lowerSnapshot;
-    private boolean privateSource, emittedFresh, lowerFresh;
+    private final Map<String, JSONObject> pending = new LinkedHashMap<>(), snapshots = new LinkedHashMap<>();
+    private final Map<String, String> statuses = new LinkedHashMap<>();
+    private final java.util.Set<String> freshStocks = new java.util.HashSet<>();
+    private boolean privateSource;
     private long nextPublish, hardDeadline;
-    private final Runnable finish = () -> complete(!emittedFresh && lastSnapshot != null
-            && !lastSnapshot.has("price"));
+    private final Runnable finish = () -> complete(freshStocks.isEmpty()
+            && snapshots.values().stream().anyMatch(quote -> !quote.has("price")));
 
     @Override public void onCreate() {
         super.onCreate();
@@ -138,8 +141,8 @@ public final class PhoneWidgetRefreshService extends JobService {
             complete(false);
             return;
         }
-        selection = new Selection(prefs);
-        if (selection.symbol.isEmpty()) {
+        selection = new Selection(this, prefs);
+        if (selection.symbols.isEmpty()) {
             complete(false);
             return;
         }
@@ -147,28 +150,27 @@ public final class PhoneWidgetRefreshService extends JobService {
         String key = run.address.isEmpty() ? "" : PhoneSecretStore.load(prefs);
         privateSource = !key.isEmpty() && run.address.startsWith("https://");
         nextPublish = 0;
-        emittedFresh = lowerFresh = false;
-        session = new PhoneDisplayFeed(prefs, (snapshot, status) -> accept(run, false, snapshot, status));
         long duration = privateSource ? PRIVATE_WINDOW : PUBLIC_WINDOW;
         ui.postAtTime(finish, Math.min(hardDeadline, SystemClock.uptimeMillis() + duration));
-        session.start(run.symbol, PhoneLiveSchedule.displayPeriod(this), 1, true);
-        if (!run.second.isEmpty()) {
-            lowerSession = new PhoneDisplayFeed(prefs,(snapshot,status) -> accept(run,true,snapshot,status));
-            lowerSession.start(run.second,PhoneLiveSchedule.displayPeriod(this),1,true);
+        String period = PhoneLiveSchedule.displayPeriod(this);
+        for (String code : run.symbols) {
+            PhoneDisplayFeed session = new PhoneDisplayFeed(prefs, (snapshot, status) -> accept(run, code, snapshot, status));
+            sessions.put(code, session);
+            session.start(code, PhoneDisplayStocks.period(run.minis, code, period), 1, true);
         }
         PhoneLiveTradingDay.refresh(this, () -> { });
     }
 
-    private void accept(Selection run, boolean lower, JSONObject data, String status) {
+    private void accept(Selection run, String code, JSONObject data, String status) {
         if (!enabled(this)) { complete(false); return; }
         if (run != selection || jobs.isEmpty() || !run.current(prefs) || prefs.getBoolean("paused", false)
-                || data == null || !(lower ? run.second : run.symbol).equals(data.optString("symbol"))) return;
-        JSONObject previous = lower ? lowerSnapshot : lastSnapshot;
-        if (data == previous && Objects.equals(lower ? lowerStatus : lastStatus, status)) return;
+                || data == null || !code.equals(data.optString("symbol"))) return;
+        JSONObject previous = snapshots.get(code);
+        if (data == previous && Objects.equals(statuses.get(code), status)) return;
         boolean initialCache = previous == null && "已缓存".equals(data.optString("source"))
                 && !data.has("book") && !data.has("fills");
-        if (lower) { lowerSnapshot = data; lowerStatus = status; }
-        else { lastSnapshot = data; lastStatus = status; }
+        snapshots.put(code, data);
+        statuses.put(code, status);
         // A new feed first replays its public candle cache. LockStar already has that frame
         // and may still be showing its validated depth and fills. Wait for the network.
         if (initialCache) return;
@@ -176,16 +178,16 @@ public final class PhoneWidgetRefreshService extends JobService {
             // Retain the validated B/S event array and price levels from this complete feed snapshot.
             // Only the provider decides which public fields may be persisted to disk.
             JSONObject updated = PhoneRealtimeCandles.copy(data).put("widget_status", status);
-            if (lower) lowerPending = updated; else pending = updated;
+            pending.put(code, updated);
         } catch (org.json.JSONException invalid) { return; }
         ui.removeCallbacks(publish);
         ui.postAtTime(publish, Math.max(nextPublish, SystemClock.uptimeMillis()));
         String source = data.optString("source");
         boolean fresh = (!source.isEmpty() && !"已缓存".equals(source)
                 || "1d".equals(data.optString("period")) && !status.contains("加载") && !status.contains("重试")) && data.has("price");
-        if (lower) lowerFresh |= fresh; else emittedFresh |= fresh;
-        if (emittedFresh && (run.second.isEmpty() || lowerFresh)
-                && detailsReady(lastSnapshot,lastStatus) && (run.second.isEmpty() || detailsReady(lowerSnapshot,lowerStatus))) {
+        if (fresh) freshStocks.add(code);
+        if (freshStocks.containsAll(run.symbols) && run.symbols.stream().allMatch(stock ->
+                detailsReady(snapshots.get(stock), statuses.get(stock)))) {
             // Do not abandon slow detail lanes after receiving the first quote.
             // The final flush delivers the latest accepted snapshot even when coalescing.
             ui.removeCallbacks(finish);
@@ -200,11 +202,9 @@ public final class PhoneWidgetRefreshService extends JobService {
     }
 
     private void publishLatest() {
-        if ((pending == null && lowerPending == null) || selection == null || !selection.current(prefs) || !enabled(this)) return;
-        JSONObject accepted = pending;
-        JSONObject lower = lowerPending;
-        pending = lowerPending = null;
-        PhoneMarketWidgetProvider.publish(this, accepted, lower);
+        if (pending.isEmpty() || selection == null || !selection.current(prefs) || !enabled(this)) return;
+        PhoneMarketWidgetProvider.publishBatch(this, pending.values(), false);
+        pending.clear();
         nextPublish = SystemClock.uptimeMillis() + PUBLISH_SPACING;
     }
 
@@ -224,11 +224,12 @@ public final class PhoneWidgetRefreshService extends JobService {
         selection = null;
         ui.removeCallbacks(publish);
         ui.removeCallbacks(finish);
-        pending = lowerPending = null;
-        lastSnapshot = lowerSnapshot = null;
-        lastStatus = lowerStatus = null;
-        if (session != null) { session.stop(); session = null; }
-        if (lowerSession != null) { lowerSession.stop(); lowerSession = null; }
+        pending.clear();
+        snapshots.clear();
+        statuses.clear();
+        freshStocks.clear();
+        for (PhoneDisplayFeed session : sessions.values()) session.stop();
+        sessions.clear();
     }
 
     @Override public boolean onStopJob(JobParameters params) {

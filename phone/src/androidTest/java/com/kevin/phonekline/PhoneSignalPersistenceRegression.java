@@ -66,7 +66,7 @@ final class PhoneSignalPersistenceRegression {
                 }
                 View widget=PhoneWidgetRenderer.render(isolated,0,empty,315,285,"1d")
                         .apply(isolated,new FrameLayout(isolated));
-                require(!widget.getContentDescription().toString().contains("B/S"),"daily AOD hides B/S");
+                require(!widget.findViewById(R.id.widget_root).getContentDescription().toString().contains("B/S"),"daily AOD hides B/S");
             });
             ((PhoneRenderInstrumentation)test).record("PERSISTENCE migration/empty update/stock+date isolation/subscription restart/offline daily/AOD PASS",true);
         } finally { prefs.edit().clear().commit(); }

@@ -6,6 +6,10 @@
     <!-- Keep previous resource IDs allocated so installed hosts inflate the revised layout on upgrade. -->
     <item name="phone_market_widget" type="layout">@layout/phone_market_widget_v3</item>
     <item name="phone_market_widget_v2" type="layout">@layout/phone_market_widget_v3</item>
+    <!-- Distinct root IDs force hosts to discard trees with click listeners from v1.21. -->
+    <item name="phone_market_widget_zzz_passive_single" type="layout">@layout/phone_market_widget_zsingle</item>
+    <item name="phone_market_widget_zzz_passive_dual" type="layout">@layout/phone_market_widget_zdual</item>
+    <item name="phone_market_widget_zzz_passive_stack" type="layout">@layout/phone_market_widget_zzstack</item>
     <style name="WidgetMarketLine">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>

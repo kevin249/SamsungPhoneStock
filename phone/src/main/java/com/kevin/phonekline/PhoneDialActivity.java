@@ -36,7 +36,11 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import com.kevin.market.StockSearch;
 
 /** Theme selection and full-screen display. System surfaces use the same preferences. */
@@ -174,9 +178,10 @@ public final class PhoneDialActivity extends Activity {
                 if (canvas != null) canvas.invalidate();
             });
             canvas = previewDisplay.view;
+            View content = previewDisplay.contentView();
             if (visible) previewDisplay.show();
-            canvas.setOnClickListener(v -> openScreen(SETTINGS));
-            setContentView(canvas);
+            content.setOnClickListener(v -> openScreen(SETTINGS));
+            setContentView(content);
         }
     }
 
@@ -204,20 +209,13 @@ public final class PhoneDialActivity extends Activity {
         liveAod=null; schedulePermission=null; backgroundPermission=null; batteryPermission=null; livePowerStatus=null;
         if (settingsTab==0) {
             beginCard();
-            String second=PhoneDisplayStocks.second(prefs);
-            LinearLayout stockHeading=new LinearLayout(this);
-            stockHeading.setGravity(Gravity.CENTER_VERTICAL);
-            stockHeading.addView(label("显示股票",20,INK),new LinearLayout.LayoutParams(0,-2,1));
-            stockHeading.addView(label(second.isEmpty()?"1 / 2":"2 / 2",15,MUTED));
-            line(stockHeading);
-            line(label("锁屏与充电屏保共用",13,MUTED));
-            stockRow(symbol,false);
-            line(label("图表类型和自动切换开关在「行情」页设置，屏保、锁屏与 AOD 共用。",13,MUTED));
-            if (second.isEmpty()) line(button("＋ 添加第二只股票",v -> pickStock(true)));
-            else {
-                stockRow(second,true);
-                line(label("拖动左侧手柄或点击 ⇅ 调整上下顺序",12,MUTED));
-            }
+            List<String> stocks = PhoneDisplayStocks.symbols(prefs);
+            Set<String> minis = PhoneDisplayStocks.minis(prefs);
+            line(label("显示股票 · " + stocks.size() + " 只", 20, INK));
+            line(label("完整图放不下时按比例缩小。Mini K 在一行显示名称、分时走势、涨跌幅和现价。", 13, MUTED));
+            List<Button> orderHandles = new ArrayList<>();
+            for (int i = 0; i < stocks.size(); i++) stockRow(stocks, minis, i, orderHandles);
+            line(button("＋ 添加股票", v -> pickStock(null)));
             endCard();
             beginCard();
             line(label("显示主题",20,INK));
@@ -271,7 +269,7 @@ public final class PhoneDialActivity extends Activity {
             endCard();
             beginCard();
             line(button("三星 AOD  ›",v -> { settingsTab=2; renderScreen(); }));
-            line(label("息屏小组件与持续更新 · 使用上方股票",13,MUTED));
+            line(label("息屏小组件与持续更新",13,MUTED));
             endCard();
         } else if (settingsTab==1) {
             beginCard();
@@ -290,7 +288,7 @@ public final class PhoneDialActivity extends Activity {
             line(label("三星息屏行情（AOD）",20,INK));
             addLiveControl();
             line(button("添加到息屏显示",v -> showWidgetSetup()));
-            line(label("AOD 显示上方股票；锁屏壁纸与充电屏保支持上下两只。",13,MUTED));
+            line(label("股票顺序与显示样式在「显示」页设置。",13,MUTED));
             endCard();
         }
         panel.requestFocus();
@@ -318,86 +316,154 @@ public final class PhoneDialActivity extends Activity {
         } catch (Exception invalid) { return code; }
     }
 
-    private void stockRow(String code, boolean second) {
-        LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL);
-        Button order=button("⇅",v -> swapStocks());
-        order.setContentDescription("上下股票换位，也可拖动调整顺序");
-        order.setEnabled(!PhoneDisplayStocks.second(prefs).isEmpty());
-        final float[] start={0};
-        order.setOnTouchListener((v,event) -> {
-            if (event.getAction()==android.view.MotionEvent.ACTION_DOWN) {
-                start[0]=event.getRawY(); v.getParent().requestDisallowInterceptTouchEvent(true); return true;
+    private void stockRow(List<String> stocks, Set<String> minis, int index, List<Button> orderHandles) {
+        String code = stocks.get(index);
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        Button order = button("⇅", v -> {
+            if (stocks.size() == 2) {
+                java.util.Collections.swap(stocks, 0, 1);
+                saveStocks(stocks, minis);
+                return;
             }
-            if (event.getAction()==android.view.MotionEvent.ACTION_UP) {
-                v.getParent().requestDisallowInterceptTouchEvent(false);
-                if (Math.abs(event.getRawY()-start[0])>dp(24)) swapStocks(); else v.performClick();
-                return true;
-            }
-            if (event.getAction()==android.view.MotionEvent.ACTION_CANCEL) v.getParent().requestDisallowInterceptTouchEvent(false);
-            return true;
+            String[] destinations = new String[stocks.size()];
+            for (int i = 0; i < stocks.size(); i++)
+                destinations[i] = (i + 1) + " · " + stockTitle(stocks.get(i)).replace('\n', ' ');
+            new AlertDialog.Builder(this).setTitle("移动到位置").setItems(destinations, (dialog, target) -> {
+                stocks.remove(index);
+                stocks.add(target, code);
+                saveStocks(stocks, minis);
+            }).show();
         });
-        row.addView(order,new LinearLayout.LayoutParams(dp(48),dp(56)));
-        TextView title=label(stockTitle(code),16,INK); title.setPadding(dp(6),0,0,0);
-        row.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        Button replace=button("更换",v -> pickStock(second)); replace.setContentDescription(second?"更换下方股票":"更换上方股票");
-        row.addView(replace,new LinearLayout.LayoutParams(dp(64),dp(56)));
-        if (!PhoneDisplayStocks.second(prefs).isEmpty()) {
-            Button remove=button("−",v -> {
-                if (!second) {
-                    prefs.edit().putString("first_chart_mode",PhoneDisplayStocks.mode(prefs)).apply();
-                    changeSymbol(PhoneDisplayStocks.second(prefs));
+        order.setContentDescription("调整 " + code + " 的顺序");
+        order.setEnabled(stocks.size() > 1);
+        orderHandles.add(order);
+        order.setOnTouchListener(new View.OnTouchListener() {
+            private float startY;
+            @Override public boolean onTouch(View handle, android.view.MotionEvent event) {
+                switch (event.getActionMasked()) {
+                    case android.view.MotionEvent.ACTION_DOWN:
+                        startY = event.getRawY();
+                        handle.getParent().requestDisallowInterceptTouchEvent(true);
+                        return true;
+                    case android.view.MotionEvent.ACTION_UP:
+                        handle.getParent().requestDisallowInterceptTouchEvent(false);
+                        float delta = event.getRawY() - startY;
+                        if (Math.abs(delta) < dp(24)) handle.performClick();
+                        else {
+                            int direction = delta > 0 ? 1 : -1;
+                            int target = Math.max(0, Math.min(stocks.size() - 1, index + direction));
+                            int[] location = new int[2];
+                            float closest = Float.MAX_VALUE;
+                            for (int i = target; i >= 0 && i < orderHandles.size(); i += direction) {
+                                Button other = orderHandles.get(i);
+                                other.getLocationOnScreen(location);
+                                float distance = Math.abs(event.getRawY() - location[1] - other.getHeight() / 2f);
+                                if (distance >= closest) break;
+                                closest = distance;
+                                target = i;
+                            }
+                            stocks.remove(index);
+                            stocks.add(target, code);
+                            saveStocks(stocks, minis);
+                        }
+                        return true;
+                    case android.view.MotionEvent.ACTION_CANCEL:
+                        handle.getParent().requestDisallowInterceptTouchEvent(false);
+                        return true;
+                    default:
+                        return true;
                 }
-                prefs.edit().remove("second_symbol").apply();
-                PhoneMarketWidgetProvider.settingsChanged(this,false);
-                renderScreen();
-            });
-            remove.setContentDescription(second?"移除下方股票":"移除上方股票");
-            row.addView(remove,new LinearLayout.LayoutParams(dp(48),dp(56)));
-        }
-        line(row);
-    }
-
-    private void pickStock(boolean second) {
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle(second?"下方股票":"上方股票").setNegativeButton("取消",null).create();
-        PhoneStockPicker picker=new PhoneStockPicker(this,second?PhoneDisplayStocks.second(prefs):symbol,code -> {
-            String other=second?symbol:PhoneDisplayStocks.second(prefs);
-            if (code.equals(other)) { toast("两只股票不能重复"); return; }
-            if (second || code.equals(symbol)) {
-                if (second) prefs.edit().putString("second_symbol", code).apply();
-                PhoneMarketWidgetProvider.settingsChanged(this, false);
-            } else changeSymbol(code);
-            PhoneStockSelectionRefresh.refresh(this, code);
-            dialog.dismiss(); renderScreen();
+            }
         });
-        picker.setPadding(dp(12),dp(12),dp(12),dp(12)); dialog.setView(picker); dialog.show();
-    }
+        row.addView(order, new LinearLayout.LayoutParams(dp(48), dp(52)));
+        row.addView(label(stockTitle(code), 16, INK), new LinearLayout.LayoutParams(0, -2, 1));
+        row.addView(button("更换", v -> pickStock(code)));
+        Button remove = button("−", v -> {
+            stocks.remove(index);
+            saveStocks(stocks, minis);
+        });
+        remove.setEnabled(stocks.size() > 1);
+        remove.setContentDescription("移除 " + code);
+        row.addView(remove, new LinearLayout.LayoutParams(dp(48), dp(52)));
+        line(row);
 
-    private void swapStocks() {
-        String second=PhoneDisplayStocks.second(prefs);
-        if (second.isEmpty()) return;
-        String previous=symbol;
-        String upperMode=PhoneDisplayStocks.firstMode(prefs), lowerMode=PhoneDisplayStocks.mode(prefs);
-        prefs.edit().putString("first_chart_mode",lowerMode).putString("second_chart_mode",upperMode).apply();
-        changeSymbol(second);
-        prefs.edit().putString("second_symbol",previous).apply();
-        PhoneMarketWidgetProvider.settingsChanged(this,false);
-        renderScreen();
-    }
-
-    private void periodControl(boolean second) {
-        String preference = second ? "second_chart_mode" : "first_chart_mode";
-        String current = second ? PhoneDisplayStocks.mode(prefs) : PhoneDisplayStocks.firstMode(prefs);
-        LinearLayout group=new LinearLayout(this);
-        String[] names={"实时","1min","1day"}, keys={"realtime","1m","1d"};
-        for(int i=0;i<keys.length;i++) {
-            final String mode=keys[i]; boolean selected=mode.equals(current);
-            Button choice=button(names[i],v -> { prefs.edit().putString(preference,mode).apply(); renderScreen(); });
-            choice.setContentDescription((second?"下方":"上方")+"图表周期 "+names[i]); choice.setSelected(selected);
-            choice.setTextColor(selected?0xff102719:INK);
-            choice.setBackgroundTintList(ColorStateList.valueOf(selected?0xffa5efbc:0xff343a36));
-            group.addView(choice,new LinearLayout.LayoutParams(0,-2,1));
+        RadioGroup styles = new RadioGroup(this);
+        styles.setOrientation(LinearLayout.HORIZONTAL);
+        RadioButton full = mode(styles, "完整图"), mini = mode(styles, "单行 Mini K");
+        styles.check(minis.contains(code) ? mini.getId() : full.getId());
+        styles.setOnCheckedChangeListener((group, id) -> {
+            Set<String> updated = new HashSet<>(PhoneDisplayStocks.minis(prefs));
+            if (id == mini.getId()) updated.add(code); else updated.remove(code);
+            saveStocks(stocks, updated);
+            PhoneStockSelectionRefresh.refresh(this, code);
+        });
+        line(styles);
+        if (!minis.contains(code)) {
+            Button height = button(fullHeightLabel(code), v -> chooseFullHeight(code, (Button) v));
+            line(height);
         }
-        line(group);
+    }
+
+    private String fullHeightLabel(String code) {
+        int height = PhoneDisplayStocks.fullHeightDp(prefs, code);
+        if (height == PhoneDisplayStocks.DEFAULT_FULL_HEIGHT_DP) return "完整图高度 · 默认 " + height + " dp";
+        return "完整图高度 · " + (height == 0 ? "自动" : height + " dp");
+    }
+
+    private void chooseFullHeight(String code, Button button) {
+        int min = PhoneDisplayStocks.MIN_HEIGHT_DP, step = PhoneDisplayStocks.HEIGHT_STEP;
+        int defaultHeight = PhoneDisplayStocks.DEFAULT_FULL_HEIGHT_DP;
+        String[] choices = new String[3 + (PhoneDisplayStocks.MAX_HEIGHT_DP - min) / step];
+        choices[0] = "默认（" + defaultHeight + " dp）";
+        choices[1] = "自动（填满剩余空间）";
+        for (int i = 2; i < choices.length; i++) choices[i] = (min + (i - 2) * step) + " dp";
+        int current = PhoneDisplayStocks.fullHeightDp(prefs, code);
+        int checked = current == defaultHeight ? 0 : current == 0 ? 1 : 2 + (current - min) / step;
+        new AlertDialog.Builder(this).setTitle("完整图高度 · " + code.substring(2))
+                .setSingleChoiceItems(choices, checked, (dialog, index) -> {
+                    dialog.dismiss();
+                    if (index == checked) return;
+                    String key = PhoneDisplayStocks.HEIGHT_PREFIX + code;
+                    SharedPreferences.Editor editor = prefs.edit();
+                    if (index == 0) editor.remove(key);
+                    else editor.putInt(key, index == 1 ? 0 : min + (index - 2) * step);
+                    editor.apply();
+                    button.setText(fullHeightLabel(code));
+                    PhoneMarketWidgetProvider.settingsChanged(this, false);
+                }).setNegativeButton("取消", null).show();
+    }
+
+    private void pickStock(String replaced) {
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(replaced == null ? "添加股票" : "更换股票")
+                .setNegativeButton("取消", null).create();
+        PhoneStockPicker picker = new PhoneStockPicker(this, replaced == null ? "" : replaced, code -> {
+            List<String> stocks = PhoneDisplayStocks.symbols(prefs);
+            if (stocks.contains(code) && !code.equals(replaced)) { toast("这只股票已在列表中"); return; }
+            Set<String> minis = new HashSet<>(PhoneDisplayStocks.minis(prefs));
+            if (replaced == null) stocks.add(code);
+            else {
+                stocks.set(stocks.indexOf(replaced), code);
+                if (minis.remove(replaced)) minis.add(code);
+            }
+            dialog.dismiss();
+            saveStocks(stocks, minis);
+            PhoneStockSelectionRefresh.refresh(this, code);
+        });
+        picker.setPadding(dp(12), dp(12), dp(12), dp(12));
+        dialog.setView(picker);
+        dialog.show();
+    }
+
+    private void saveStocks(List<String> stocks, Set<String> minis) {
+        PhoneDisplayStocks.save(prefs, stocks, minis);
+        changeSymbol(stocks.get(0));
+        PhoneMarketWidgetProvider.settingsChanged(this, false);
+        ScrollView previous = (ScrollView) settingsRoot.getParent();
+        int offset = previous.getScrollY();
+        renderScreen();
+        ScrollView current = (ScrollView) settingsRoot.getParent();
+        current.post(() -> current.scrollTo(0, offset));
     }
 
     private void addLiveControl() {
@@ -467,7 +533,7 @@ public final class PhoneDialActivity extends Activity {
     }
 
     private void addChartControls() {
-        line(label("图表类型",16,INK));
+        line(label("完整图的图表类型",16,INK));
         RadioGroup modes = new RadioGroup(this);
         modes.setOrientation(LinearLayout.HORIZONTAL);
         modes.setContentDescription("图表类型：实时、1min、1day");
@@ -601,8 +667,6 @@ public final class PhoneDialActivity extends Activity {
         session.stop();
         saveSnapshot();
         symbol = next;
-        prefs.edit().putString("symbol", symbol).apply();
-        PhoneMarketWidgetProvider.settingsChanged(this, true);
         restoreSnapshot();
         restartFeed();
     }
@@ -767,8 +831,7 @@ public final class PhoneDialActivity extends Activity {
         updateLiveControls();
         PhoneLiveSchedule.syncFromActivity(this);
         restartFeed();
-        PhoneStockSelectionRefresh.refresh(this, symbol);
-        PhoneStockSelectionRefresh.refresh(this, PhoneDisplayStocks.second(prefs));
+        for (String code : PhoneDisplayStocks.symbols(prefs)) PhoneStockSelectionRefresh.refresh(this, code);
         if (previewDisplay!=null) previewDisplay.show();
         ui.removeCallbacks(showRates);
         ui.post(showRates);

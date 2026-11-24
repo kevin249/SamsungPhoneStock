@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content">
+    <!-- RemoteViews can set padding on every supported Android version. This empty
+         anchor gives the chart an exact row height even on hosts before Android 12. -->
+    <FrameLayout android:id="@+id/widget_zzz_panel_measure" android:layout_width="1dp"
+        android:layout_height="wrap_content" android:visibility="invisible"
+        android:importantForAccessibility="no" />
+    <FrameLayout android:id="@id/widget_zz_stock_panel" android:layout_width="match_parent"
+        android:layout_height="0dp" android:layout_alignTop="@id/widget_zzz_panel_measure"
+        android:layout_alignBottom="@id/widget_zzz_panel_measure" />
+</RelativeLayout>

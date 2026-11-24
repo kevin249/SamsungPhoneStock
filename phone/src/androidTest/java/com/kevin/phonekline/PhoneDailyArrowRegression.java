@@ -60,7 +60,7 @@ final class PhoneDailyArrowRegression {
 
                 View aod = PhoneWidgetRenderer.render(context, 0, marked, 315, 285).apply(context, new FrameLayout(context));
                 Bitmap aodMarked = widgetPlot(aod);
-                require(!aod.getContentDescription().toString().contains("B/S"), "AOD daily B/S description");
+                require(!aod.findViewById(R.id.widget_root).getContentDescription().toString().contains("B/S"), "AOD daily B/S description");
                 require(hasBothArrowColors(aodMarked), "AOD daily TDW arrows missing");
                 prefs.edit().putBoolean("show_signals", false).commit();
                 View aodBare = PhoneWidgetRenderer.render(context, 0, marked, 315, 285).apply(context, new FrameLayout(context));

@@ -28,7 +28,7 @@ final class PhoneStockSelectionRefresh {
         if (code.isEmpty() || PhoneLiveSchedule.canStartSession(context)) return;
         Context app = context.getApplicationContext();
         SharedPreferences prefs = app.getSharedPreferences("phone_dial", Context.MODE_PRIVATE);
-        boolean daily = "1d".equals(PhoneLiveSchedule.displayPeriod(app));
+        boolean daily = !PhoneDisplayStocks.minis(prefs).contains(code) && "1d".equals(PhoneLiveSchedule.displayPeriod(app));
         String cacheKey = (daily ? "daily_snapshot_" : "snapshot_") + code;
         if (!needsSnapshot(prefs, code, cacheKey) || !PENDING.add(cacheKey)) return;
         NETWORK.execute(() -> {
@@ -59,7 +59,7 @@ final class PhoneStockSelectionRefresh {
 
     private static boolean needsSnapshot(SharedPreferences prefs, String code, String key) {
         return !prefs.getBoolean("paused", false)
-                && (code.equals(prefs.getString("symbol", "sz000063")) || code.equals(PhoneDisplayStocks.second(prefs)))
+                && PhoneDisplayStocks.symbols(prefs).contains(code)
                 && !hasBars(PhoneDisplayFeed.cached(prefs, key, code));
     }
 

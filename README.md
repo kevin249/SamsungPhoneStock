@@ -1,159 +1,80 @@
-# 腕上盯盘 · SamsungPhoneStock
+# 息屏 K 线 · 腕上盯盘
 
-参考 [wenzidingpan](https://github.com/kevin249/wenzidingpan)，支持 Galaxy Watch4 及更新的 Wear OS 手表（最低 API 30）。**0.2.0 起手表独立联网，不需要电脑桥接或电脑常开。**
+在三星手机上，熄屏、点亮锁屏或插电进入屏保时，都可以看到同一组自选股。每只股票可单独选完整图或单行 Mini K。手表端可独立查看 K 线、切换表盘和接收策略消息。
 
-开源版不预置 MCP 服务地址或客户端 Key。公开 K 线可独立使用。MCP 通知、实时快照、千档盘口和交易日历需要配置自己的兼容服务。手表与手机各自在本机保存接口配置。
+## 下载安装
 
-## 表盘预览
-
-四款独立表盘可同时安装，长按手表主屏即可切换。以下为盘面预览，图中的行情为示例。
-
-| 02 昼夜折面 | 07 砂丘地平线 |
-| :---: | :---: |
-| <img src="watchface/src/fold/res/drawable-nodpi/preview.png" alt="02 昼夜折面表盘" width="280"> | <img src="watchface/src/dune/res/drawable-nodpi/preview.png" alt="07 砂丘地平线表盘" width="280"> |
-| **16 青岚山脊** | **17 盐湖倒影** |
-| <img src="watchface/src/ridge/res/drawable-nodpi/preview.png" alt="16 青岚山脊表盘" width="280"> | <img src="watchface/src/salt/res/drawable-nodpi/preview.png" alt="17 盐湖倒影表盘" width="280"> |
-
-## APK 下载
-
-### 三星手机行情与锁屏壁纸
-
-在 Android 8.0 及以上手机上安装 [phone-kline.apk（手机 v1.20）](https://github.com/kevin249/SamsungPhoneStock/releases/download/phone-v1.20/phone-kline.apk)，打开「息屏 K 线」。可在[该版本的 Release](https://github.com/kevin249/SamsungPhoneStock/releases/tag/phone-v1.20) 下载 SHA-256 校验清单，也可按下方「开发和验证」自行构建。
-
-手机支持三星息屏行情（AOD）、亮屏锁定时的动态壁纸和充电闲置时的屏保。AOD 与锁屏上的 LockStar 行情小组件、锁屏壁纸和充电屏保均支持最多两只股票，共用「行情」页的图表类型与自动切换开关。
-
-v1.19 的设置页按「显示 / 行情 / 后台」分组。「显示」页可添加或更换两只股票，拖动左侧手柄或点击 ⇅ 交换上下位置，也可移除一只恢复单股布局。锁屏壁纸和充电屏保复用现有报价、K 线/分时、盘口和 TDW 绘制风格，双股上下排列。屏保、锁屏和 AOD 共用图表类型与自动切换开关；关闭自动时固定显示所选「实时 / 1min / 1day」：实时使用全天交易时间轴，1min 显示最近 60 根分钟线，1day 显示最近 60 根不复权日线。日线历史优先通达信，失败时使用公开行情；日线缓存独立于分钟缓存，分钟实时数据更新当日日线。单股模式保留原有布局；选两只股票时，LockStar 行情小组件也按上下两栏显示，分别更新报价、图表和盘口。小组件高度由 LockStar 控制，双股时可在编辑页拖动边角增高，为两张图留出空间。
-
-「行情设置」支持按代码、中文名、拼音全拼或首字母查找股票。「1 分钟 K 线」在全屏主题中显示最近 60 根分钟蜡烛，在三星息屏行情小组件中按当天交易时间定位。小组件的两种图都从左侧 09:30 延伸到右侧 15:00，折叠午休，尚无数据的时段留空。「显示千档挂单」与「显示 B/S 买卖标记」可分别开关。
-
-锁屏壁纸与充电屏保把全天最高价、最低价放在图内左上角和左下角。盘口和走势共用价格轴，买卖挂单从绘图区右缘向左展开，条长与挂单量成正比。挤在同一细行里的同侧挂单按量加权定位，右侧另列价格刻度。
-
-锁屏背景默认提亮 20%，可在「显示 → 锁屏壁纸 → 背景提亮」中调整到 0–40%；0% 恢复主题原底色。提亮仅作用于锁屏背景，图表文字、AOD 和充电屏保不受影响。充电屏保独立使用低亮度并保持显示；应用内的屏保预览在插电时保持亮屏，拔电、离开预览或切到后台后恢复正常超时规则。正式屏保仍由系统在充电闲置时启动，按侧键主动熄屏不会启动充电屏保。
-
-#### B/S 箭头与 TDW「逃顶王」
-
-主图的 B/S 来自 MCP 策略信号。打开「显示 B/S 买卖标记」后，红色向上箭头表示买入，绿色向下箭头表示卖出。日 K 主图隐藏 B/S，TDW 副图仍显示阈值箭头。
-
-TDW 在手机本地计算：实时与 1min 使用一分钟行情，1day 使用日线行情。锁屏壁纸和充电屏保的 K 线、分时模式均在主图下方显示等宽副图，共用时间轴。三星息屏小组件在 K 线模式下显示 TDW。
-
-- **动力线**为 `EMA(4 × (收盘价 − 近 10 根最低价) / (近 25 根最高价 − 近 10 根最低价), 4)`。灰线显示数值，相邻两根之间用空心柱表示变化，上升为红色，持平或下降为绿色。
-- **副图箭头**标记动力线穿越阈值的位置。上穿 0.2「底部」或 0.5「关注」画红色向上箭头，下穿 3.2「阶段卖出」或 3.5「清仓卖出」画绿色向下箭头。四个条件各自独立过滤，触发后 20 根内跳过同一条件的重复信号。1.75 点线标示强弱分界。
-
-<img src="design/phone-modes/114-charging-device.png" alt="114 纯黑行情充电屏保，分时主图下方显示 TDW 动力线和穿越箭头" width="300">
-
-#### 手机显示与取数设置
-
-- **按侧键查看三星息屏行情**。开启三星息屏显示。在 Good Lock（好锁）的 LockStar 中进入「息屏提醒 → 应用程序小组件」，添加「息屏 K 线 → 息屏行情」，拖动边角放大后点「完成」。系统时钟下方显示报价，图内左上是全天最高价、左下是全天最低价。图下分列报价时间和盘口采样时间。LockStar 在息屏时会调暗整个小组件，编辑器的预览会更亮。[三星 LockStar 小组件说明](https://www.samsung.com/uk/mobile-phone-buying-guide/what-are-widgets/)
-- **息屏小组件的盘中持续更新**。在「三星息屏行情」中打开「盘中持续更新息屏行情」，允许通知和按开盘时间自动启动。确认交易日后，手机在上海时间 09:15–15:00（含午休）保持小组件行情连接，并显示常驻通知。应用提交两帧的间隔至少为 1 秒。午休保持实时图；统一显示时段外取消后台定时刷新和持续订阅，只保留缓存日 K。暂停行情会停止获取。
-- **锁屏动态壁纸**。点「共用主题」选择样式。首次安装默认 114「纯黑行情」，也可选 115「深灰网格」、95「深夜书店」、96「雨停便利店」、100「桥影」、101「面摊」或 102「跨江索道」。点「设置系统壁纸」，在系统选择器中选择锁屏位置。亮屏锁定时由系统显示时钟，壁纸绘制行情。在识别到已配置的 LockStar 行情小组件时，亮屏锁屏和 AOD 由小组件显示行情，避免同一张图叠绘。
-- **充电屏保**。点「预览充电屏保」查看所选主题的行情和时钟。点「充电屏保设置」，在系统中选择本应用和充电触发条件。接入电源并等待屏幕自然超时后，系统启动屏保。若希望插电期间关闭 AOD，可在三星「模式和日常程序」中添加充电时关闭「息屏提醒」的规则，结束时恢复原设置。
-- **行情获取间隔**可按供电状态分别设置。充电时默认 0.2 秒，未充电时默认 0.5 秒。两档均可选 1 秒、0.5 秒、0.2 秒或 0.1 秒，插拔电源后自动切换。间隔表示发起请求的目标间隔。设置页分别统计逐笔和盘口在最近 1 秒内发出的请求数和成功返回数。
-- **双股盘口稳定性**。每只股票的千档请求需等上一笔返回后再发起，慢请求不会堆叠。短暂失败或返回无效盘口时保留上一笔已核验、仍有效的挂单，并显示异常状态；失败不会延长旧盘口的有效期，超过 30 秒或接口拒绝授权后清除。两只股票分别保存盘口，较早的返回不会覆盖较新的采样。
-- **实时接口**使用手机上配置的 HTTPS MCP 服务和客户端 Key。交易时段分别按所选间隔获取逐笔成交和千档盘口，逐笔成交更新当前分钟蜡烛。日 K 显示 MA5（黄）、MA10（浅蓝）、MA20（淡紫），不叠加 L2 盘口横条或盘口图例，实时分时/分钟图仍遵循盘口开关。AOD、锁屏壁纸及屏保共用「行情」页的两个参数：图表类型（实时 / 1min / 1day）和自动切换开关。开启自动切换时，交易日上海时间 09:15–15:00 显示实时图，含午休，其余时间显示日 K；关闭时固定采用所选类型。充电与未充电规则相同。后台请求独立受 09:15–15:00、周末及已确认休市日限制，时段外仅显示缓存，下一有效时段恢复。图例中的「采样」是数据源的盘口时间，图下的「取回」是手机成功收到该次盘口的时间，显示到秒。B/S 来自当前标的真实策略信号，按时间和价格定位。已接受的 B/S 按股票独立持久保存，包含交易日期；空轮询、暂停、休市和订阅重建不清除记录。实时和 1 分钟图只显示对应交易日的 B/S，切换股票不会混用。
-- **公开行情**可独立提供分钟 K 线。MCP 工具包括 `get_stock_active_trades`、`get_tdx_kline`、`get_tdx_snapshot`、`get_tdx_depth` 和通知资源。手机使用 Android Keystore 加密保存 Key，原图中的演示价格和盘口不会写入运行界面。
-
-### Wear OS 手表安装包
-
-打开 [最新 Release](https://github.com/kevin249/SamsungPhoneStock/releases/latest) 下载，或使用下面的直接下载链接。安装包安装到 **Wear OS 手表**。
-
-| 安装包 | 内容 | 系统要求 |
+| 装在哪里 | 下载 | 适用设备 |
 | --- | --- | --- |
-| [watch-mcp.apk](https://github.com/kevin249/SamsungPhoneStock/releases/latest/download/watch-mcp.apk) | 腕上盯盘应用 v0.6.7；为表盘提供行情和消息数据 | Android API 30 及以上的 Wear OS 手表 |
-| [dial-fold.apk](https://github.com/kevin249/SamsungPhoneStock/releases/latest/download/dial-fold.apk) | 02 昼夜折面 v1.4 | Wear OS 4 及以上 |
-| [dial-dune.apk](https://github.com/kevin249/SamsungPhoneStock/releases/latest/download/dial-dune.apk) | 07 砂丘地平线 v1.4 | Wear OS 4 及以上 |
-| [dial-ridge.apk](https://github.com/kevin249/SamsungPhoneStock/releases/latest/download/dial-ridge.apk) | 16 青岚山脊 v1.4 | Wear OS 4 及以上 |
-| [dial-salt.apk](https://github.com/kevin249/SamsungPhoneStock/releases/latest/download/dial-salt.apk) | 17 盐湖倒影 v1.4 | Wear OS 4 及以上 |
+| 手机 | [息屏 K 线 v1.25](https://github.com/kevin249/SamsungPhoneStock/releases/download/phone-v1.25/phone-kline.apk) | Android 8.0 及以上。三星息屏组件需要支持 Good Lock / LockStar 的机型 |
+| 手表 | [腕上盯盘 v0.6.7](https://github.com/kevin249/SamsungPhoneStock/releases/download/phone-v1.25/watch-mcp.apk) | Wear OS，Android API 30 及以上，如 Galaxy Watch4 系列 |
+| 手表表盘 | [昼夜折面](https://github.com/kevin249/SamsungPhoneStock/releases/download/phone-v1.25/dial-fold.apk) · [砂丘地平线](https://github.com/kevin249/SamsungPhoneStock/releases/download/phone-v1.25/dial-dune.apk) · [青岚山脊](https://github.com/kevin249/SamsungPhoneStock/releases/download/phone-v1.25/dial-ridge.apk) · [盐湖倒影](https://github.com/kevin249/SamsungPhoneStock/releases/download/phone-v1.25/dial-salt.apk) | 四款表盘均为 v1.4，需要 Wear OS 4 及以上，行情由「腕上盯盘」提供 |
 
-Release 附有 [SHA256SUMS.txt](https://github.com/kevin249/SamsungPhoneStock/releases/latest/download/SHA256SUMS.txt) 校验文件。Release 提供已签名的 APK，可用 ADB 侧载并覆盖升级同签名版本。先安装 `watch-mcp.apk`，再安装喜欢的表盘；表盘行情和消息需要在应用内配置自己的 MCP 服务。
+只用手机时，下载并打开手机 APK 即可。首次使用可直接看公开行情。完整安装包与文件校验值见 [v1.25 发布页](https://github.com/kevin249/SamsungPhoneStock/releases/tag/phone-v1.25)和 [SHA-256 清单](https://github.com/kevin249/SamsungPhoneStock/releases/download/phone-v1.25/SHA256SUMS.txt)。
 
-## 功能
+## 手机上配置行情
 
-- 默认显示最近 48 根日 K，红涨绿跌；支持日 K、周 K、1 分钟和 5 分钟。
-- K 线页上滑切换下一只自选股，下滑切换上一只，按自选顺序首尾循环；左滑查看 MCP 通知，右滑返回，通知页上下滑动仍为滚动消息。顶部菜单「股票列表」合并切换和自选管理：左侧两行显示名称、代码，点击切换；右侧「↑」上移一位（第一只再上移则移到末尾，顺序自动保存），「−」直接删除，顶部「+」支持按代码、名称、拼音和拼音首字母搜索添加。另可切换周期和 MCP 设置。
-- K 线由手表直连东财，失败时降级腾讯和新浪，失败保留最后一帧。
-- MCP 由手表直连配置的 URL，支持新版 `subscriptions/listen`、旧版 `initialize/resources/subscribe`，收到更新信号立即读取消息，每 10 秒重读资源补漏。
-- 最近 100 条通知，支持正文滚动、事件 ID 去重和未读数。
-- 0.4.0 起通过独立前台服务持续接收 MCP；切到后台或熄屏仍接收，新消息以系统通知震动提醒。首次历史同步及重复消息不重复震动。
-- 0.5.0 起后台接收开启期间持续请求 Wi-Fi；有已验证可上网的 Wi-Fi 就绑定使用，断开或失去互联网验证时优先切手机蓝牙，恢复后切回 Wi-Fi 并重建 MCP 订阅。行情也使用所选网络；两者都不可用时可使用其他已验证网络。
-- 客户端 Key 用手表 Android Keystore 加密，禁用备份，不写入源码或日志。
+1. 打开「息屏 K 线 → 显示 → ＋ 添加股票」，按代码、中文名、拼音或首字母搜索。可继续添加多只，用每行的「⇅」调整先后顺序。
+2. 为每只股票选择样式。**完整图**适合看价格走势、刻度和指标。**单行 Mini K** 将名称、分时走势、涨跌幅和现价排在一行，适合放在重点股票下方。
+3. 点对应股票的「完整图高度」调整。默认 **332 dp**，也可选 104 至 312 dp 的固定档位，或选「自动」填满剩余空间。Mini K 每行占 26 dp。卡片放不下时，先为 Mini K 留出空间，再按比例缩小完整图。若仍无法为每张完整图留出至少 32 dp，剩余股票按原顺序排到下一页。
 
-四款表盘适用于 Wear OS 4 及更新版本。长按盘面中央可选择「02 昼夜折面」「07 砂丘地平线」「16 青岚山脊」或「17 盐湖倒影」。进入系统「自定义」可分别设置行情图、千档挂单分布和 MCP 买卖标记。选完短按手表主屏键返回，每款独立保存。亮屏时双击图表，按「腕上盯盘 → 股票列表」的顺序切到下一只，末尾回到第一只。点未读区域可看消息。股价后的小字上方为最高、下方为最低，底部日期和时间标明行情所属交易日。
+例如，保留一张默认完整图并在下面放两行 Mini K，行情内容需要约 384 dp。将系统卡片调得更矮，完整图会随之缩小，两行报价仍各占一行。
 
-新表盘默认选中「实时分时」，千档挂单和 MCP 买卖标记均选「显示」。千档盘口按实际返回的买卖档位分别累加，再按价位画成细横条；每侧最多 1,000 档。纵轴始终按 K 线的最高、最低价自适应，千档只显示此价格范围内的挂单，远端挂单不会压扁 K 线。盘前分时仍为最近交易日，盘口可来自当天盘前采集的快照。
+### 让 AOD、锁屏和充电屏保显示一致
 
-表盘默认显示分时线，固定 9:30 至 15:00，午休折叠。MCP 买入信号用红色向上三角，卖出用绿色向下三角。通达信交易日历确认开市后，上海时间 09:30–11:30 和 13:00–15:00 亮屏时每秒请求当前股票的最新成交。0.6.7 起使用逐笔成交的价格和成交时间更新当前一分钟蜡烛。表盘在交易时段熄屏时每 30 秒预约一次更新，抬腕先显示已备好的图，再取最新成交。分钟历史和千档盘口分别补齐，较早的数据只补历史缺口。节假日、盘前、午休及收盘后，有缓存时按 15 分钟更新，无缓存时每分钟重试。切换股票立即加载。
+1. 在三星系统「设置 → 锁定屏幕和息屏提醒」开启息屏显示（AOD）。在 Good Lock（好锁）启用 LockStar。应用内「后台 → 添加到息屏显示」也可打开设置指引。
+2. 在三星锁屏编辑器进入「LockStar → 息屏提醒 → 应用程序小组件」，选择「息屏 K 线 → 息屏行情」。把组件放在屏幕上半部，拖动边角设定显示区域，然后点「完成」。菜单名称随 One UI 版本略有差异。
+3. 要使用充电屏保，打开应用「显示 → 充电屏保 → 系统屏保设置」，选择本应用并设置充电时启动。接入电源，等待屏幕自然超时即可查看。
 
-交易日历保存在手表本地，断网时沿用已确认的日期。接口可能只返回已发生的交易日，未覆盖的日期按未知处理，行情保持低频。手表跨夜熄屏时会预约次日 09:29 核对日历。日期仍未知时，亮屏在交易窗口每分钟重试日历，熄屏时每 5 分钟预约重试。确认开市后自动恢复盘中刷新。
+配置后，三处共用同一张行情卡片，股票顺序、当前页和图高相同。AOD 亮度由三星系统控制，充电屏保保留自己的时钟。息屏与点亮之间切换会保留当前页。多页行情在同一屏幕状态下显示满 30 秒后，于下一次行情或系统刷新时翻页。
 
-只请求当前显示的股票，切换后取消旧股票请求、丢弃迟到结果，不遍历或预取其他自选股。慢请求期间不堆积新请求；实际到达时间仍取决于网络、行情源和系统调度。手表应用内的独立 K 线页仍按选定周期显示最近 48 根，「较前根」指相对前一根收盘价的变化。
+**人脸识别后上滑解锁**时，从行情组件下方留出的空白区域起手。行情本身只读，但 LockStar 外框也占用触摸区域。如果上滑仍停在锁屏，回到编辑器，把组件上移或收短，给平时起手的位置留出空间。[三星小组件说明](https://www.samsung.com/uk/mobile-phone-buying-guide/what-are-widgets/)
 
-## 安装和设置
+也可以独立使用动态壁纸或充电屏保。在「显示」选择主题后，点「锁屏壁纸 → 应用到锁屏」或「充电屏保 → 系统屏保设置」。未添加 LockStar 行情组件时，这两处使用主题布局，每 15 秒轮换一页。桌面也可添加「息屏行情」，点击「下一页」切换。
 
-从上方 Release 下载 `watch-mcp.apk` 和所需表盘 APK 到同一文件夹，并将 Android SDK 的 `platform-tools` 加入 `PATH`。也可按下方「开发和验证」自行构建。
+### 图表与盘中更新
 
-1. 手表与电脑连接同一 Wi-Fi。
-2. 手表「设置 → 关于手表 → 软件信息」，连续点击「软件版本」5 次。
-3. 在开发者选项开启 ADB 调试和无线调试，进入「配对新设备」。
+| 想调整什么 | 在哪里设置 |
+| --- | --- |
+| 分时、1 分钟或日 K | 「行情 → 图表显示」。开启「自动切换实时 / 日 K」后，交易日上海时间 09:15–15:00 显示实时图（含午休），其余时间显示日 K。关闭后使用手选类型 |
+| 看均线、盘口和买卖点 | 日 K 显示 MA5、MA10、MA20。分时和分钟图可分别开启千档挂单与 B/S 策略信号，两者需要兼容的实时接口 |
+| 息屏时持续更新 | 「后台 → 持续更新息屏行情」，按提示允许通知和按开盘时间自动启动。盘中更新结束后保留缓存，下一交易时段恢复 |
+| 调整取数频率 | 「行情 → 行情获取间隔」分别设置充电和未充电频率，默认每 0.2 秒和 0.5 秒请求一次。实际到达时间受行情源、网络及系统调度影响 |
 
-```powershell
-$adb = 'adb'
-& $adb pair 手表IP:配对端口
-# 按提示输入手表配对码
-```
+三星组件里的分时和 1 分钟图按 09:30–15:00 排列，折叠午休，尚未交易的时段留空。完整图里的 TDW 动力线用箭头标记指标穿越阈值的位置，可参考[独立充电屏保的实机图](design/phone-modes/114-charging-device.png)。
 
-返回无线调试主页，使用主页上的连接端口（通常不同于配对端口）。在下载 APK 的文件夹打开 PowerShell，先安装应用，再安装所需表盘：
+## 在手表上使用
+
+手表和电脑连接同一 Wi-Fi，在手表开发者选项开启 ADB 调试和无线调试，选择「配对新设备」。将 Android SDK 的 `platform-tools` 加入电脑的 `PATH`，在下载 APK 的目录打开 PowerShell，依次执行以下命令。配对端口在配对页，连接端口在无线调试主页，按手表显示的实际值填写。
 
 ```powershell
-$device = '手表IP:连接端口'
-& $adb connect $device
-& $adb -s $device install -r .\watch-mcp.apk
-& $adb -s $device install -r .\dial-fold.apk
-# 其他表盘可同样安装：dial-dune.apk、dial-ridge.apk、dial-salt.apk
+adb pair 手表IP:配对端口
+# 按提示输入配对码，然后返回手表的无线调试主页
+$watch = '手表IP:连接端口'
+adb connect $watch
+adb -s $watch install -r .\watch-mcp.apk
+adb -s $watch install -r .\dial-fold.apk
 ```
 
-安装后，长按手表主屏，在「添加表盘」中选择对应名称。首次打开「腕上盯盘」完成通知权限和 MCP 设置；表盘数据由此应用提供。
+最后一行可换成喜欢的表盘文件，四款可同时安装。长按手表主屏，在「添加表盘」中选择。日常使用时手表独立联网，可以关闭无线调试。
 
-已克隆源码的用户，也可将下载的五个 APK 放入项目 `dist/` 文件夹，或先完成构建，再用脚本一次安装应用和全部表盘：
+| 02 昼夜折面 | 07 砂丘地平线 | 16 青岚山脊 | 17 盐湖倒影 |
+| :---: | :---: | :---: | :---: |
+| <img src="watchface/src/fold/res/drawable-nodpi/preview.png" alt="昼夜折面表盘预览" width="160"> | <img src="watchface/src/dune/res/drawable-nodpi/preview.png" alt="砂丘地平线表盘预览" width="160"> | <img src="watchface/src/ridge/res/drawable-nodpi/preview.png" alt="青岚山脊表盘预览" width="160"> | <img src="watchface/src/salt/res/drawable-nodpi/preview.png" alt="盐湖倒影表盘预览" width="160"> |
 
-```powershell
-cd SamsungPhoneStock
-.\scripts\install-watch.ps1 -Device '手表IP:连接端口'
-```
+- **在「腕上盯盘」里**，顶部菜单可管理股票和周期。日 K、周 K、1 分钟和 5 分钟图显示最近 48 根。上滑看下一只，下滑看上一只，左滑看消息，右滑返回。
+- **在系统表盘上**，亮屏时双击图表切到下一只，轻点未读区域查看消息。在系统「自定义」内选择图表、千档挂单和买卖标记。
+- **需要消息提醒时**，先配置 MCP，再打开顶部菜单「后台通知设置」并允许通知及后台联网。手表保存最近 100 条消息并按事件去重，后台接收会增加耗电。
 
-如需安装时同时配置 MCP，请显式传入自己的地址：
+## 实时接口与隐私
 
-```powershell
-$mcpUrl = Read-Host '输入自己的 HTTPS MCP URL'
-.\scripts\install-watch.ps1 -Device '手表IP:连接端口' -ConfigureMcp -McpUrl $mcpUrl
-```
+公开 K 线开箱可用。若要看逐笔成交、千档盘口、策略买卖点或接收通知，请准备自己的 HTTPS MCP 服务和客户端 Key。在手机「行情 → 配置实时接口」和手表顶部菜单「MCP 接口设置」分别填写。两端各自保存配置，客户端 Key 使用本机 Android Keystore 加密，应用禁用备份。发布包不含预设服务地址或 Key。
 
-脚本询问 Key，输入不回显；仅配置手表，不启动电脑服务或保存电脑 Key 文件。未配置完整的地址和 Key 时，不连接 MCP。
+自建服务需支持 Streamable HTTP MCP，并按使用的功能提供对应工具。行情使用 `get_tdx_kline`、`get_tdx_snapshot`、`get_stock_active_trades` 和 `get_tdx_depth`，交易日历使用 `get_tdx_trading_calendar`。消息使用 `get_notification_stream` 返回的资源地址，客户端按更新通知读取资源。字段解析见[手机实时客户端](phone/src/main/java/com/kevin/phonekline/PhoneMcpClient.java)和[手表行情客户端](wear/src/main/java/com/kevin/watchmcp/DialMarket.java)。
 
-已安装，只配置手表 MCP：
+## 从源码构建
 
-```powershell
-$mcpUrl = Read-Host '输入自己的 HTTPS MCP URL'
-.\scripts\configure-watch-mcp.ps1 -Device '手表IP:连接端口' -McpUrl $mcpUrl
-```
-
-也可在手表点击顶部 →「MCP 接口设置」，填写 MCP URL 和客户端 Key 并保存。仅更新安装包时省略 `-ConfigureMcp`，保留现有设置。安装后可以关闭无线调试，电脑可以关机，手表只需能联网。
-
-首次打开新版，请允许「通知」权限，并按提示允许后台运行/忽略电池优化；否则系统深度休眠可能暂停长连接。可在顶部菜单「后台通知设置」查看权限或暂停接收。新消息通知频道默认震动两次、不播放声音，连接状态通知保持安静；通知点击后进入 MCP 页面。
-
-部分三星 Wear OS 的电池授权页面为系统占位入口，不会显示授权选项。安装脚本会通过已配对的 ADB，仅将本应用加入电池优化豁免；设置一次后长期保留，关闭无线调试也不影响。手动安装 APK 的用户可在配对后执行：
-
-```powershell
-& $adb -s '手表IP:连接端口' shell dumpsys deviceidle whitelist +com.kevin.watchmcp
-```
-
-菜单显示「熄屏联网 · 已允许」即设置成功。需要撤销时，将命令中的 `+com.kevin.watchmcp` 改为 `-com.kevin.watchmcp`。
-
-后台持续联网会增加耗电。10 秒补读间隔优先保证及时性，空闲时约每分钟读取 6 次；实际补漏延迟还包括请求耗时及系统调度，断网和休眠限制时不保证 10 秒内收到。震动遵守手表系统的勿扰、睡眠模式及通知频道设置。断网后会重连并读取服务器保留的消息；强行停止应用后需手动重新打开。系统正常回收服务会尝试重启，手表重启或升级安装后也会恢复用户开启的接收。
-
-## 开发和验证
-
-配套手表应用为 `dist/watch-mcp.apk`，四个表盘包为 `dist/dial-{fold,dune,ridge,salt}.apk`，手机低亮度主题为 `dist/phone-kline.apk`。源码使用 UTF-8，手表表盘采用 Watch Face Format v1，通过 AndroidX 复杂功能接口读取行情。
-使用 JDK 17、Android SDK 34、Gradle 8.9 / AGP 8.6.1：
+准备 JDK 17、Android SDK Platform 34 和 Build Tools 34.0.0。将 `JAVA_HOME`、`ANDROID_HOME` 分别指向 JDK 和 SDK 目录。在 Windows PowerShell 中执行以下命令。
 
 ```powershell
 git clone https://github.com/kevin249/SamsungPhoneStock.git
@@ -161,40 +82,15 @@ cd SamsungPhoneStock
 .\scripts\build.ps1
 ```
 
-请先设置 `JAVA_HOME` 为 JDK 17 目录，`ANDROID_HOME` 为 Android SDK 目录，并安装 SDK Platform 34 与 Build Tools。构建脚本使用仓库附带的 Gradle Wrapper，同时执行 Android Lint 和单元测试，再复制 APK 到 `dist/`。已有独立工具链目录时，也可传入 `-Toolchain`。Linux/macOS 可运行 `./gradlew assembleDebug lintDebug testDebugUnitTest`，APK 位于各模块的 `build/outputs/apk/` 下。
+脚本构建手机应用、手表应用和四款表盘，同时运行 Android Lint 和单元测试，将六个 APK 放入 `dist/`。macOS 或 Linux 可在仓库根目录运行 `./gradlew assembleDebug lintDebug testDebugUnitTest`，从各模块的 `build/outputs/apk/` 取包。
 
-## MCP 服务要求
+仅构建和检查手机应用，可在仓库根目录运行 `.\gradlew.bat :phone:assembleDebug :phone:lintDebug :phone:testDebugUnitTest`。给已配对的手表一次安装所有兼容的包，可运行 `.\scripts\install-watch.ps1 -Device $watch`。安装脚本同时将手表应用加入电池优化豁免，以便熄屏联网。单独配置手表接口可用 `.\scripts\configure-watch-mcp.ps1 -Device $watch -McpUrl $mcpUrl`，其中 `$mcpUrl` 为自己的 HTTPS 服务地址，脚本会提示输入 Key。
 
-项目包含手表客户端，不包含通达信行情网关。服务需支持 Streamable HTTP MCP，以及客户端使用的这些工具和数据结构：
-
-| 工具 | 用途及主要返回字段 |
+| 目录 | 内容 |
 | --- | --- |
-| `get_notification_stream` | 返回 `resource_uri`，资源提供 `notifications` 和事件序号；订阅资源更新后重新读取。 |
-| `get_tdx_kline` | 分钟 K 线，`bars` 中包含 `date`、`open`、`high`、`low`、`close`。 |
-| `get_tdx_snapshot` | `snapshot` 中包含 `datetime`、`last_price`、`high_price`、`low_price`、`pre_close`。 |
-| `get_tdx_depth` | 千档盘口的 `levels`、`symbol`、`source_at`、`requested_depth` 及数据可用性标记。 |
-| `get_tdx_trading_calendar` | 实际交易日白名单：`ok`、`source`、`market`、`start_date`、`end_date`、`row_count`、`dates`。 |
+| [phone/](phone/) | 手机应用、桌面与 LockStar 行情组件、动态壁纸和充电屏保 |
+| [wear/](wear/) · [watchface/](watchface/) | 独立手表客户端、行情数据源与四款 Watch Face Format v1 表盘 |
+| [shared/](shared/) · [scripts/](scripts/) | 共用股票搜索等代码，以及构建、安装和配置脚本 |
+| [tests/](tests/) · [bridge/](bridge/) | 测试服务及早期电脑桥接实现。当前手机和手表直接访问行情服务 |
 
-具体解析见 `McpHistory.java`、`DialMarket.java` 和 `DialCalendar.java`。普通 MCP 服务若没有这些行情工具，只能使用其已实现的兼容功能。
-
-## 测试
-
-原生测试 `DirectClientInstrumentation` 在真实手表验证 Keystore 加解密、明文 Key 不落盘、协议发现、HTTP 鉴权、资源基线和 SSE 推送；`-e background true` 另测后台服务、熄屏与强制 Doze 下的接收、系统震动频道和持久去重。测试网关 `tests/direct_mcp_fixture.py` 只使用虚构 Key，经 ADB reverse 访问本机端口；测试后解除强制 Doze 并清理测试消息。
-
-`-w -e network_policy true` 使用手表现有 MCP 配置，验证 Wi-Fi 熄屏保持、Wi-Fi 实际断连后切手机蓝牙、恢复后切回。蓝牙阶段通过 shell 持续关闭 Wi-Fi 模拟网络不可用，避免 Wear OS 自动重新开启无线电；不修改热点或密码。测试结束恢复 Wi-Fi 及原先已开启的无线调试。在设备侧通过 `nohup` 启动并重定向输出，避免 ADB 断开影响测试。每秒将路由、进程绑定、屏幕状态和系统通知时间存入应用私有目录 `files/network-policy-test.json`，不包含 Key。测试期间从网站「测试 MCP 提醒」发送消息，再按事件 ID 核对各阶段接收。测试会留下测试通知；不等同于强制 Doze 验证。
-
-Wi-Fi 持续请求会增加耗电；熄屏保持依赖系统允许后台联网，不能保证深度休眠、强制停止、手动关闭无线网络或离开信号范围时不断线。暂停后台接收或服务结束时释放 Wi-Fi 请求和网络绑定。
-
-`-w -e long_sleep true` 在原有电池优化豁免下做长时间熄屏测试：启动端读到 `natural_start` 后关闭无线调试，静置16分钟，再强制Doze静置11分钟，结束解除强制Doze并恢复原先的无线调试。测试不持唤醒锁、不循环采样；只通过阶段边界闹钟取样（复用现有电池豁免，不新增权限）。在自然阶段第15分钟、Doze阶段第8和第10分钟从网站发送消息。应用私有目录 `files/long-sleep-test.json` 记录阶段边界网络、系统休眠状态、elapsed/uptime以及本应用新通知时间。边界闹钟本身会唤醒CPU，故只用其触发前的消息评估延迟；采样也不能证明整个区间绝无短暂断连，需结合网络ID与路由日志判断。
-
-- `wear/src/main/`：手表独立客户端。
-- `wear/src/androidTest/`：原生集成测试。
-- `scripts/`：构建、安装、设置工具。
-- `bridge/` 及对应 Python 测试：0.1.0 旧桥接代码，当前手表不使用。
-- `.runtime/`：临时测试产物，不纳入 Git。
-
-参考出处见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-
-## 许可证
-
-本项目采用 [MIT License](LICENSE)。复用代码的来源和说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+本项目使用 [MIT 许可证](LICENSE)。行情实现参考 [wenzidingpan](https://github.com/kevin249/wenzidingpan)，复用说明见[第三方声明](THIRD_PARTY_NOTICES.md)。

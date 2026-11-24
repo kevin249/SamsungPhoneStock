@@ -19,7 +19,7 @@ final class PhoneDisplayFeed {
     private JSONObject daily, latest;
     private String symbol = "", mode = "", status = "等待行情", dailyStatus = "日 K 加载中";
     private int generation;
-    private boolean started, paused, cacheOnly, snapshotOnly;
+    private boolean started, paused, cacheOnly, snapshotOnly, minuteOnly;
     private String address = "", secret = "";
     private final java.util.function.Consumer<JSONObject> minuteObserver;
 
@@ -50,7 +50,8 @@ final class PhoneDisplayFeed {
         String url = prefs.getString("mcp_url", "");
         String key = url.isEmpty() ? "" : PhoneSecretStore.load(prefs);
         boolean nextPaused = prefs.getBoolean("paused",false);
-        if (started && this.symbol.equals(symbol) && this.mode.equals(mode) && paused == nextPaused
+        boolean nextMinuteOnly = PhoneDisplayStocks.minis(prefs).contains(symbol) && !"1d".equals(mode);
+        if (started && minuteOnly == nextMinuteOnly && this.symbol.equals(symbol) && this.mode.equals(mode) && paused == nextPaused
                 && address.equals(url) && secret.equals(key) && this.cacheOnly == cacheOnly && this.snapshotOnly == snapshotOnly) {
             if (cacheOnly) {
                 JSONObject saved = cached("snapshot_" + symbol);
@@ -66,6 +67,7 @@ final class PhoneDisplayFeed {
         stop();
         this.cacheOnly = cacheOnly;
         this.snapshotOnly = snapshotOnly;
+        minuteOnly = nextMinuteOnly;
         started = true; paused = nextPaused; address = url; secret = key;
         this.symbol = symbol;
         this.mode = mode;
@@ -79,8 +81,8 @@ final class PhoneDisplayFeed {
         if (paused || cacheOnly) return;
         if (snapshotOnly) live.startSnapshot(symbol,url,key,latest);
         else live.startDisplay(symbol,url,key,hz,latest);
-        // Warm daily history during the trading session so the closing transition can stay offline.
-        {
+        // Full charts switch to cached daily history at the close. Mini rows always use intraday data.
+        if (!minuteOnly) {
             publicClient = new PhoneMarketClient();
             mcp = url.isEmpty() || key.isEmpty() ? null : new PhoneMcpClient(url,key);
             worker = new ScheduledThreadPoolExecutor(1);

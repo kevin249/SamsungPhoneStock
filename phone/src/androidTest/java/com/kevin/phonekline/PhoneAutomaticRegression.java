@@ -111,7 +111,7 @@ final class PhoneAutomaticRegression {
                     new PhoneMarketPlot(data,false,true,true,true).drawWidget(canvas,0,0,650,500);
                     require(!canvas.buy&&!canvas.sell&&canvas.tdw,"real daily Canvas shows TDW and hides B/S");
                     View host=PhoneWidgetRenderer.render(context,0,data,315,285,"1d").apply(context,new FrameLayout(context));
-                    require(!host.getContentDescription().toString().contains("B/S"),"real daily widget hides B/S");
+                    require(!host.findViewById(R.id.widget_root).getContentDescription().toString().contains("B/S"),"real daily widget hides B/S");
                     save(context,"regression-aod-real.png",((BitmapDrawable)((ImageView)host.findViewById(R.id.widget_plot)).getDrawable()).getBitmap());
                     PhoneCandleView lock=new PhoneCandleView(context);
                     lock.setUpperPeriod("1d");lock.setMarket(data,symbol);

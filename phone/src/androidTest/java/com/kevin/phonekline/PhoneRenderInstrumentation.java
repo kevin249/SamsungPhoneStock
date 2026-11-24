@@ -9,6 +9,7 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.os.Bundle;
 
 import org.json.JSONArray;
@@ -100,11 +101,14 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
                         }
                     };
                     for (int i=0; !checkWidgetOnly && i<themes.length; i++) check(i);
+                    if (!checkWidgetOnly) checkSingleChartHeight();
+                    if (!checkWidgetOnly) checkFittedCanvasCharts();
                     for (int i=0; !checkWidgetOnly && i<themes.length; i++) {
                         if (themes[i] == PhoneCandleView.LOCK_BLACK || themes[i] == PhoneCandleView.LOCK_GRAPHITE)
                             PhoneChargingChartInstrumentation.check(isolated, options, themes[i], charts[i]);
                     }
                     if (!checkWidgetOnly) PhoneDualChartInstrumentation.check(isolated,options);
+                    PhoneStockListRegression.check(isolated, getContext(), options);
                     PhoneWidgetInstrumentation.check(getTargetContext(), getContext());
                 }
                 catch (Exception | AssertionError failure) { result.putString("error", failure.toString()); }
@@ -254,7 +258,9 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
 
     private void check(int i) throws Exception {
         // Baseline comparisons below require identical artwork on lock and dream.
-        options.edit().putInt(PhoneCandleView.LOCK_BACKGROUND_LIFT,0).commit();
+        options.edit().putInt(PhoneCandleView.LOCK_BACKGROUND_LIFT,0)
+                .putInt(PhoneDisplayStocks.HEIGHT_PREFIX + "sz000001", 0)
+                .putInt(PhoneDisplayStocks.HEIGHT_PREFIX + "sz000002", 0).commit();
         int theme = themes[i];
         PhoneCandleView view = new PhoneCandleView(isolated);
         boolean ambient = theme==104 || theme==108;
@@ -343,6 +349,95 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
         plain.recycle(); empty.recycle();
     }
 
+    private void checkSingleChartHeight() throws Exception {
+        String symbol = "sz000001", key = PhoneDisplayStocks.HEIGHT_PREFIX + symbol;
+        PhoneCandleView view = new PhoneCandleView(isolated);
+        view.setTheme(95);
+        view.setSurface(PhoneCandleView.Surface.DREAM);
+        view.setFrameTime(LocalDateTime.of(2026, 11, 5, 10, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
+        view.layout(0, 0, 540, 1170);
+        JSONObject quote = fixture();
+        options.edit().putInt(key, 0).apply();
+        view.setMarket(quote, symbol);
+        Bitmap automatic = render(view);
+        try {
+            float previousSpan = 0;
+            for (int height : new int[]{104, 312}) {
+                options.edit().putInt(key, height).apply();
+                view.setMarket(quote, symbol);
+                Bitmap fixed = Bitmap.createBitmap(540, 1170, Bitmap.Config.ARGB_8888);
+                try {
+                    float[] rangeY = {Float.NaN, Float.NaN};
+                    Canvas canvas = new Canvas(fixed) {
+                        @Override public void drawText(String text, float x, float y, Paint paint) {
+                            super.drawText(text, x, y, paint);
+                            if (paint.getTextAlign() == Paint.Align.LEFT && ("10.63".equals(text) || "9.15".equals(text))) {
+                                float[] point = {x, y};
+                                getMatrix().mapPoints(point);
+                                rangeY["10.63".equals(text) ? 0 : 1] = point[1];
+                            }
+                        }
+                    };
+                    view.draw(canvas);
+                    // Date, weekday and charging clock sit above the stock on the bookshop theme.
+                    if (changed(automatic, fixed, new int[]{0, 80, 1080, 360}) != 0)
+                        throw new AssertionError("fixed stock height changed themed date or clock at " + height);
+                    float span = rangeY[1] - rangeY[0];
+                    if (!(span > previousSpan + 1))
+                        throw new AssertionError("day range labels at " + height + " dp span " + span + " px, previous " + previousSpan);
+                    previousSpan = span;
+                } finally { fixed.recycle(); }
+            }
+        } finally {
+            automatic.recycle();
+            options.edit().remove(key).apply();
+        }
+    }
+
+    private void checkFittedCanvasCharts() throws Exception {
+        PhoneCandleView view = new PhoneCandleView(isolated);
+        view.setTheme(PhoneCandleView.LOCK_BLACK);
+        java.util.List<String> stocks = java.util.Arrays.asList("sz300001", "sh600001", "sz300002");
+        java.util.Set<String> minis = java.util.Collections.singleton(stocks.get(1));
+        float density = isolated.getResources().getDisplayMetrics().density;
+        // The multi-stock artwork reserves 1540 of its 2340 design units for the stock list.
+        int height = Math.round(218 * density * 2340 / 1540);
+        view.layout(0, 0, 540, height);
+        java.util.List<PhoneStockLayout.Page> pages = view.layoutPages(stocks, minis);
+        if (pages.size() != 1) throw new AssertionError("two default Canvas charts and Mini K must share a page");
+        PhoneStockLayout.Page page = pages.get(0);
+        view.setPage(page, "");
+        for (int i = 0; i < stocks.size(); i++) {
+            String code = stocks.get(i);
+            JSONObject quote = fixture().put("symbol", code).put("high", 10.06).put("low", 9.95);
+            view.setStock(i, quote, code, "", "1m", i == 1);
+        }
+        Bitmap screen = Bitmap.createBitmap(540, height, Bitmap.Config.ARGB_8888);
+        try {
+            view.draw(new Canvas(screen));
+            int top = 550;
+            for (int i = 0; i < page.heights.length; i++) {
+                int row = page.heights[i];
+                int dp = i == 1 ? 26 : 96;
+                if (Math.abs(row * height / 2340f - dp * density) > 1.5f)
+                    throw new AssertionError("fitted Canvas row height for " + stocks.get(i));
+                if (i != 1) {
+                    int fromY = Math.round((top + row * .25f) * height / 2340);
+                    int toY = Math.round((top + row * .74f) * height / 2340);
+                    boolean candle = false;
+                    for (int y = fromY; y < toY && !candle; y++) {
+                        for (int x = 185; x < 355 && !candle; x++) {
+                            int color = screen.getPixel(x, y);
+                            candle = color == 0xffdf978c || color == 0xff83bca1;
+                        }
+                    }
+                    if (!candle) throw new AssertionError("no candles inside compressed Canvas chart " + stocks.get(i));
+                }
+                top += row;
+            }
+        } finally { screen.recycle(); }
+    }
+
     private void checkSwitches(PhoneCandleView view, JSONObject snapshot, JSONArray levels, int[] chart,
                                int[] edge, Bitmap candles) throws Exception {
         snapshot.put("book", new JSONObject().put("levels", levels).put("source_at", "2026-11-05 10:29:01"));
@@ -363,7 +458,7 @@ public final class PhoneRenderInstrumentation extends Instrumentation {
         view.refreshChartOptions();
         Bitmap both = render(view);
         if (changed(depth, both, chart) < 12) throw new AssertionError("intraday signals missing");
-        options.edit().clear().apply();
+        options.edit().remove("chart_mode").remove("show_depth").remove("show_signals").apply();
         noLayers.recycle(); line.recycle(); depth.recycle(); both.recycle();
     }
 

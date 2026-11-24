@@ -9,12 +9,43 @@ import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.util.SparseArray;
+import android.widget.RemoteViews;
 
 import org.json.JSONException;
 import org.json.JSONObject;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 /** The system owns the widget surface, including copies placed on AOD by LockStar. */
 public final class PhoneMarketWidgetProvider extends AppWidgetProvider {
+    static final String NEXT_PAGE = "com.kevin.phonekline.WIDGET_NEXT_PAGE";
+
+    @Override public void onReceive(Context context, android.content.Intent intent) {
+        if (NEXT_PAGE.equals(intent.getAction())) {
+            int target = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID);
+            for (int id : widgetIds(context)) {
+                if (id != target) continue;
+                if (!PhoneWidgetRenderer.isDesktopWidget(AppWidgetManager.getInstance(context).getAppWidgetOptions(id))) break;
+                SharedPreferences settings = prefs(context);
+                String key = PhoneWidgetRenderer.PAGE + id;
+                settings.edit().putInt(key, settings.getInt(key, 0) + 1).apply();
+                updateTheme(context);
+                PhoneWidgetRefreshService.schedule(context, true);
+                break;
+            }
+            return;
+        }
+        super.onReceive(context, intent);
+    }
+
+    static java.util.Set<String> visibleStocks(Context context) {
+        SharedPreferences settings = prefs(context);
+        java.util.Set<String> visible = new java.util.LinkedHashSet<>();
+        for (int id : widgetIds(context)) visible.addAll(PhoneWidgetRenderer.visibleStocks(context, settings, id));
+        return visible;
+    }
+
     private static final long VISIBLE_UPDATE_MS = 15_000;
     private static final String CACHE = "widget_candles";
     private static final java.util.Map<String,JSONObject> minutes = new java.util.HashMap<>();
@@ -22,6 +53,8 @@ public final class PhoneMarketWidgetProvider extends AppWidgetProvider {
     private static final java.util.Map<String,Long> nextVisible = new java.util.HashMap<>(), nextCache = new java.util.HashMap<>();
     // null after process death: the next wallpaper-state check reconciles the host's cached layout.
     private static Boolean wallpaperCoversWidget;
+    private static final SparseArray<RemoteViews> lockStarFrames = new SparseArray<>();
+    private static final Set<Runnable> lockStarObservers = new CopyOnWriteArraySet<>();
 
     private static int[] widgetIds(Context context) {
         return AppWidgetManager.getInstance(context).getAppWidgetIds(
@@ -33,26 +66,62 @@ public final class PhoneMarketWidgetProvider extends AppWidgetProvider {
     }
 
     static boolean hasLockStarWidget(Context context) {
+        return lockStarWidgetId(context) != AppWidgetManager.INVALID_APPWIDGET_ID;
+    }
+
+    static int lockStarWidgetId(Context context) {
         try {
             if (Settings.System.getInt(context.getContentResolver(), "lockstar_enabled", 0) <= 0
                     || !context.getPackageManager().getApplicationInfo("com.samsung.systemui.lockstar", 0).enabled) {
-                return false;
+                return AppWidgetManager.INVALID_APPWIDGET_ID;
             }
         } catch (PackageManager.NameNotFoundException | SecurityException unavailable) {
-            return false;
+            return AppWidgetManager.INVALID_APPWIDGET_ID;
         }
         AppWidgetManager manager = AppWidgetManager.getInstance(context);
         for (int id : widgetIds(context)) {
-            Bundle options = manager.getAppWidgetOptions(id);
-            // The Samsung lock-screen editor identifies these hosts by widget size and grid spans.
-            // One UI Home also sends semWidgetSize, but supplies its launcher host metadata.
-            if (options.containsKey("semWidgetSize") && !options.containsKey("semHostType")
-                    && !options.containsKey("hsWidgetDisplayId")
-                    && options.getInt("semAppWidgetRowSpan") > 0 && options.getInt("semAppWidgetColumnSpan") > 0) {
-                return true;
-            }
+            if (isLockStarHost(manager.getAppWidgetOptions(id))) return id;
         }
-        return false;
+        return AppWidgetManager.INVALID_APPWIDGET_ID;
+    }
+
+    static boolean isLockStarHost(Bundle options) {
+        // Samsung's lock-screen editor supplies grid spans without One UI Home's launcher metadata.
+        return options.containsKey("semWidgetSize") && !options.containsKey("semHostType")
+                && !options.containsKey("hsWidgetDisplayId")
+                && options.getInt("semAppWidgetRowSpan") > 0 && options.getInt("semAppWidgetColumnSpan") > 0;
+    }
+
+    static void addLockStarObserver(Runnable listener) { lockStarObservers.add(listener); }
+    static void removeLockStarObserver(Runnable listener) { lockStarObservers.remove(listener); }
+
+    private static void lockStarChanged() {
+        for (Runnable observer : lockStarObservers) observer.run();
+    }
+
+    // The charging screensaver can show this same committed frame without advancing the page
+    // or independently rebuilding the chart from a later quote.
+    static RemoteViews lockStarFrame(Context context, int id) {
+        RemoteViews frame = lockStarFrames.get(id);
+        if (frame != null) return frame;
+        AppWidgetManager manager = AppWidgetManager.getInstance(context);
+        Bundle options = manager.getAppWidgetOptions(id);
+        if (!isLockStarHost(options)) return null;
+        frame = PhoneWidgetRenderer.render(context, id, latest(context), options, false);
+        // After process recreation, bring the platform's retained widget and the screensaver
+        // to the same saved page and cached quote on their first shared frame.
+        if (!Boolean.TRUE.equals(wallpaperCoversWidget)) manager.updateAppWidget(id, frame);
+        lockStarFrames.put(id, frame);
+        return frame;
+    }
+
+    static void refreshLockStarPageIfDue(Context context, int id) {
+        AppWidgetManager manager = AppWidgetManager.getInstance(context);
+        Bundle options = manager.getAppWidgetOptions(id);
+        if (isLockStarHost(options) && !Boolean.TRUE.equals(wallpaperCoversWidget)
+                && PhoneWidgetRenderer.advancePassivePageIfDue(context, id, options)) {
+            render(context, manager, new int[]{id}, latest(context));
+        }
     }
 
     private static SharedPreferences prefs(Context context) {
@@ -67,7 +136,7 @@ public final class PhoneMarketWidgetProvider extends AppWidgetProvider {
         SharedPreferences settings = prefs(context);
         if (symbol.isEmpty()) return null;
         PhoneSignalStore.migrate(settings,symbol);
-        if ("1d".equals(PhoneLiveSchedule.displayPeriod(context)) && daily.containsKey(symbol))
+        if (!PhoneDisplayStocks.minis(settings).contains(symbol) && "1d".equals(PhoneLiveSchedule.displayPeriod(context)) && daily.containsKey(symbol))
             return PhoneSignalStore.restore(settings,daily.get(symbol));
         if (minutes.containsKey(symbol)) return PhoneSignalStore.restore(settings,minutes.get(symbol));
         JSONObject widget = read(settings, CACHE + "_" + symbol, symbol);
@@ -96,9 +165,24 @@ public final class PhoneMarketWidgetProvider extends AppWidgetProvider {
 
     @Override public void onAppWidgetOptionsChanged(Context context, AppWidgetManager manager, int id, Bundle options) {
         render(context, manager, new int[]{id}, latest(context));
+        PhoneWidgetRefreshService.schedule(context, true);
+    }
+
+    @Override public void onDeleted(Context context, int[] ids) {
+        SharedPreferences.Editor editor = prefs(context).edit();
+        for (int id : ids) {
+            PhoneWidgetRenderer.passivePages.forget(id);
+            lockStarFrames.remove(id);
+            editor.remove(PhoneWidgetRenderer.PAGE + id).remove("widget_passive_since_" + id);
+        }
+        editor.apply();
+        lockStarChanged();
     }
 
     @Override public void onDisabled(Context context) {
+        PhoneWidgetRenderer.passivePages.stop();
+        lockStarFrames.clear();
+        lockStarChanged();
         PhoneWidgetRefreshService.cancel(context);
         minutes.clear(); daily.clear(); nextCache.clear();
         nextVisible.clear();
@@ -112,9 +196,20 @@ public final class PhoneMarketWidgetProvider extends AppWidgetProvider {
             manager.updateAppWidget(ids, PhoneWidgetRenderer.wallpaperPlaceholder(context));
             return;
         }
+        boolean lockStarUpdated = false;
         for (int id : ids) {
-            manager.updateAppWidget(id, PhoneWidgetRenderer.render(context, id, quote));
+            Bundle options = manager.getAppWidgetOptions(id);
+            RemoteViews frame = PhoneWidgetRenderer.render(context, id, quote, options, true);
+            manager.updateAppWidget(id, frame);
+            if (isLockStarHost(options)) {
+                lockStarFrames.put(id, frame);
+                lockStarUpdated = true;
+            } else if (lockStarFrames.indexOfKey(id) >= 0) {
+                lockStarFrames.remove(id);
+                lockStarUpdated = true;
+            }
         }
+        if (lockStarUpdated) lockStarChanged();
     }
 
     static void setWallpaperCover(Context context, boolean covered) {
@@ -154,36 +249,31 @@ public final class PhoneMarketWidgetProvider extends AppWidgetProvider {
     }
 
     static void publish(Context context, JSONObject quote) {
-        publish(context,quote,null);
+        publishBatch(context, java.util.Collections.singletonList(quote), false);
     }
 
-    static void publish(Context context, JSONObject quote, JSONObject lower) {
-        if (PhoneLiveMarketService.isStreaming()) return;
-        update(context, quote, false);
-        update(context, lower, false);
+    static void publishBatch(Context context, Iterable<JSONObject> quotes, boolean stream) {
+        if (!stream && PhoneLiveMarketService.isStreaming()) return;
+        updateBatch(context, quotes, stream);
+    }
+
+    static void publishPresentationQuotes(Context context, Iterable<JSONObject> quotes) {
+        if (!PhoneLiveMarketService.isStreaming()) updateBatch(context, quotes, true);
+    }
+
+    private static void updateBatch(Context context, Iterable<JSONObject> quotes, boolean throttleCacheWrites) {
+        for (JSONObject quote : quotes) update(context, quote, throttleCacheWrites);
         updateTheme(context);
     }
 
-    static void publishStream(Context context, JSONObject quote) {
-        publishStream(context,quote,null);
-    }
-
-    static void publishStream(Context context, JSONObject upper, JSONObject lower) {
-        update(context,upper,true);
-        update(context,lower,true);
-        updateTheme(context);
-    }
-
-    private static void update(Context context, JSONObject quote, boolean stream) {
+    private static void update(Context context, JSONObject quote, boolean throttleCacheWrites) {
         if (quote == null || quote.optJSONArray("bars") == null) return;
         SharedPreferences settings = prefs(context);
         String symbol = quote.optString("symbol");
-        if (settings.getBoolean("paused", false) || symbol.isEmpty()
-                || !(settings.getString("symbol", "sz000063").equals(symbol)
-                || PhoneDisplayStocks.second(settings).equals(symbol))) return;
-        minutes.keySet().removeIf(code -> !code.equals(settings.getString("symbol","sz000063"))
-                && !code.equals(PhoneDisplayStocks.second(settings)));
-        daily.keySet().retainAll(java.util.Arrays.asList(settings.getString("symbol","sz000063"),PhoneDisplayStocks.second(settings)));
+        java.util.List<String> selected = PhoneDisplayStocks.symbols(settings);
+        if (settings.getBoolean("paused", false) || !selected.contains(symbol)) return;
+        minutes.keySet().retainAll(selected);
+        daily.keySet().retainAll(selected);
         quote = PhoneSignalStore.accept(settings,quote);
         int[] ids = widgetIds(context);
         if (ids.length == 0) return;
@@ -196,7 +286,7 @@ public final class PhoneMarketWidgetProvider extends AppWidgetProvider {
         boolean newStock = !minutes.containsKey(symbol);
         minutes.put(symbol,quote);
         long now = SystemClock.elapsedRealtime();
-        if (stream && !newStock && now < nextCache.getOrDefault(symbol,0L)) return;
+        if (throttleCacheWrites && !newStock && now < nextCache.getOrDefault(symbol,0L)) return;
         nextCache.put(symbol,now + 30_000L);
         // Keep accepted B/S markers with their dated candles so idle displays survive process death.
         // The volatile depth book is deliberately not persisted.

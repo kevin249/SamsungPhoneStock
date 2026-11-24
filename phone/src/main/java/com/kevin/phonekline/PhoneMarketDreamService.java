@@ -35,7 +35,7 @@ public final class PhoneMarketDreamService extends DreamService {
         // screenBright also removes KEEP_SCREEN_ON and permits idle dimming.
         setScreenBright(true);
         display = new PhoneSystemDisplay(this, false, () -> display.view.invalidate());
-        setContentView(display.view);
+        setContentView(display.contentView());
     }
 
     @Override public void onDreamingStarted() {

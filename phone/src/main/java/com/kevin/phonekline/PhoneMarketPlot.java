@@ -94,6 +94,15 @@ final class PhoneMarketPlot {
     }
 
     PhoneMarketPlot(JSONObject snapshot, boolean requestedIntraday, boolean showSignals, boolean showDepth, boolean widget) {
+        this(snapshot, requestedIntraday, showSignals, showDepth, widget, false);
+    }
+
+    static PhoneMarketPlot mini(JSONObject snapshot) {
+        return new PhoneMarketPlot(snapshot, true, false, false, false, true);
+    }
+
+    private PhoneMarketPlot(JSONObject snapshot, boolean requestedIntraday, boolean showSignals, boolean showDepth,
+                            boolean widget, boolean traceOnly) {
         daily = snapshot != null && "1d".equals(snapshot.optString("period"));
         this.intraday = requestedIntraday && !daily;
         sessionAxis = !daily && (intraday || widget);
@@ -116,6 +125,14 @@ final class PhoneMarketPlot {
             if (!daily && !stamp.startsWith(session)) continue;
             Candle candle = new Candle(row, stamp, daily);
             if (candle.valid()) reverse.add(candle);
+        }
+        if (traceOnly) {
+            for (int i = reverse.size() - 1; i >= 0; i--) bars.add(reverse.get(i));
+            if (!bars.isEmpty() && !daily) {
+                formingEnd = observedSlot(snapshot.optString("quote_at"), bars.get(bars.size() - 1));
+                buildTrace();
+            }
+            return;
         }
         calculateTdw(reverse);
         Map<String,Double> averages = intraday ? PhoneSessionAverage.prices(snapshot) : null;

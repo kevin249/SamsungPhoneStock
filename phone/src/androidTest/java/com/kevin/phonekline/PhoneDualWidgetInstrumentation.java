@@ -65,8 +65,9 @@ final class PhoneDualWidgetInstrumentation {
                 "the new daily cache fills the selected panel");
         require(plot(saved) != null, "selected daily chart appears after caching");
         prefs.edit().remove("second_symbol").commit();
-        require(PhoneWidgetRenderer.render(context,-1,upper,280,285,"realtime").getLayoutId()==R.layout.phone_market_widget_zsingle,
-                "removing second stock restores single widget layout");
+        View single = PhoneWidgetRenderer.render(context,-1,upper,280,285,"realtime").apply(host,new FrameLayout(host));
+        require(description(single).contains("603986") && single.findViewById(R.id.widget_lower_slot) == null,
+                "removing second stock leaves only the selected stock");
     }
 
     private static JSONObject book(int volume) throws Exception {

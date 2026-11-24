@@ -13,6 +13,8 @@ final class PhoneChargingChartInstrumentation {
     private static final double BID = 261.19, ASK = 268.73;
 
     static void check(Context context, SharedPreferences options, int theme, int[] chart) throws Exception {
+        // These design-space checks measure the theme's original automatic chart area.
+        options.edit().putInt(PhoneDisplayStocks.HEIGHT_PREFIX + "sh603986", 0).apply();
         JSONArray bars = new JSONArray(), levels = new JSONArray();
         for (double price : new double[]{BID, ASK}) {
             boolean bid = price == BID;

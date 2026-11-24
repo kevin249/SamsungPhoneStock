@@ -18,6 +18,9 @@ import android.os.SystemClock;
 import org.json.JSONObject;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
 
 /** User-enabled market subscription, including depth while the ambient widget is visible. */
 public final class PhoneLiveMarketService extends Service {
@@ -33,7 +36,13 @@ public final class PhoneLiveMarketService extends Service {
     private final Runnable guard = this::checkWindow;
     private final Runnable flush = this::publishLatest;
     private final SharedPreferences.OnSharedPreferenceChangeListener changed = (settings, key) -> {
-        if (key == null || key.equals("symbol") || key.equals("second_symbol") || key.equals("mcp_url")
+        if (key != null && key.startsWith(PhoneDisplayStocks.HEIGHT_PREFIX)) {
+            main.removeCallbacks(guard);
+            main.post(guard);
+            return;
+        }
+        if (key == null || key.equals("symbol") || key.equals("second_symbol") || key.equals(PhoneDisplayStocks.ORDER)
+                || key.equals(PhoneDisplayStocks.MINI) || key.startsWith(PhoneWidgetRenderer.PAGE) || key.equals("mcp_url")
                 || key.equals("mcp_key_cipher") || key.equals("mcp_key_iv") || key.equals("paused")
                 || key.equals("live_aod_enabled") || key.equals(PhoneDisplayWindow.AUTOMATIC) || key.equals(PhoneDisplayWindow.MODE) || key.equals("live_calendar_date") || key.equals("live_calendar_open")) {
             // Discard queued frames before switching symbol, credentials or stopping.
@@ -44,10 +53,10 @@ public final class PhoneLiveMarketService extends Service {
     };
     private SharedPreferences prefs;
     private PowerManager.WakeLock wake;
-    private PhoneDisplayFeed session, lowerSession;
+    private final Map<String, PhoneDisplayFeed> sessions = new LinkedHashMap<>();
     private String displayPeriod = "";
     private PhoneSamplingRate rates;
-    private JSONObject pending, received, lowerPending, lowerReceived;
+    private final Map<String, JSONObject> pending = new LinkedHashMap<>(), received = new LinkedHashMap<>();
     private long nextFrame;
     private long submittedFrames, lastSubmittedAt;
     private boolean checkingDay, stopping;
@@ -58,8 +67,7 @@ public final class PhoneLiveMarketService extends Service {
         super.onCreate();
         prefs = getSharedPreferences("phone_dial", MODE_PRIVATE);
         rates = new PhoneSamplingRate(this,prefs,hz -> {
-            if (session!=null) session.setRate(hz);
-            if (lowerSession!=null) lowerSession.setRate(hz);
+            for (PhoneDisplayFeed session : sessions.values()) session.setRate(hz);
         });
         rates.start();
         prefs.registerOnSharedPreferenceChangeListener(changed);
@@ -120,23 +128,19 @@ public final class PhoneLiveMarketService extends Service {
         long checkIn = Math.min(30_000L, 60_050L - System.currentTimeMillis() % 60_000L);
         main.postDelayed(guard, checkIn);
         String period = PhoneLiveSchedule.displayPeriod(this);
-        if (session != null && period.equals(displayPeriod)) return;
+        Set<String> visible = PhoneMarketWidgetProvider.visibleStocks(this);
+        if (visible.isEmpty()) { stopMarket(false); return; }
+        if (sessions.keySet().equals(visible) && period.equals(displayPeriod)) return;
         detach();
         displayPeriod = period;
         PhoneMarketWidgetProvider.updateTheme(this);
-        String symbol = PhoneRealtimeCandles.normalize(prefs.getString("symbol", "sz000063"));
-        if (symbol.isEmpty()) {
-            stopMarket(false);
-            return;
-        }
         streaming = true;
         PhoneLiveSchedule.armNext(this);
-        session = new PhoneDisplayFeed(prefs, (quote,status) -> onQuote(false,quote,status));
-        session.start(symbol, period, rates.current());
-        String lower = PhoneDisplayStocks.second(prefs);
-        if (!lower.isEmpty()) {
-            lowerSession = new PhoneDisplayFeed(prefs,(quote,status) -> onQuote(true,quote,status));
-            lowerSession.start(lower,period,rates.current());
+        Set<String> minis = PhoneDisplayStocks.minis(prefs);
+        for (String code : visible) {
+            PhoneDisplayFeed session = new PhoneDisplayFeed(prefs, (quote, status) -> onQuote(code, quote));
+            sessions.put(code, session);
+            session.start(code, PhoneDisplayStocks.period(minis, code, period), rates.current());
         }
     }
 
@@ -151,27 +155,24 @@ public final class PhoneLiveMarketService extends Service {
         stopSelf();
     }
 
-    private void onQuote(boolean lower, JSONObject quote, String status) {
+    private void onQuote(String selected, JSONObject quote) {
         if (!PhoneLiveSchedule.shouldStream(this)) { checkWindow(); return; }
-        JSONObject previous = lower ? lowerReceived : received;
-        String selected = lower ? PhoneDisplayStocks.second(prefs) : prefs.getString("symbol","sz000063");
+        JSONObject previous = received.get(selected);
         if (quote == null || quote == previous || !quote.has("bars") || !selected.equals(quote.optString("symbol"))) return;
         boolean replay = previous == null && "已缓存".equals(quote.optString("source"))
                 && !quote.has("book") && !quote.has("fills");
-        if (lower) lowerReceived = quote; else received = quote;
+        received.put(selected, quote);
         if (replay) return;
-        if (pending == null && lowerPending == null) {
+        if (pending.isEmpty()) {
             main.postAtTime(flush, Math.max(SystemClock.uptimeMillis(), nextFrame));
         }
-        if (lower) lowerPending = quote; else pending = quote;
+        pending.put(selected, quote);
     }
 
     private void publishLatest() {
-        JSONObject data = pending;
-        JSONObject lower = lowerPending;
-        pending = lowerPending = null;
-        if ((data == null && lower == null) || !streaming || !prefs.getBoolean("live_aod_enabled", false)) return;
-        PhoneMarketWidgetProvider.publishStream(this, data, lower);
+        if (pending.isEmpty() || !streaming || !prefs.getBoolean("live_aod_enabled", false)) return;
+        PhoneMarketWidgetProvider.publishBatch(this, pending.values(), true);
+        pending.clear();
         submittedFrames++;
         lastSubmittedAt = SystemClock.elapsedRealtime();
         nextFrame = SystemClock.uptimeMillis() + FRAME_MS;
@@ -180,10 +181,11 @@ public final class PhoneLiveMarketService extends Service {
     private void detach() {
         streaming = false;
         main.removeCallbacks(flush);
-        pending = received = lowerPending = lowerReceived = null;
+        pending.clear();
+        received.clear();
         nextFrame = 0;
-        if (session != null) { session.stop(); session = null; }
-        if (lowerSession != null) { lowerSession.stop(); lowerSession = null; }
+        for (PhoneDisplayFeed session : sessions.values()) session.stop();
+        sessions.clear();
     }
 
     private Notification notice() {
@@ -224,21 +226,13 @@ public final class PhoneLiveMarketService extends Service {
                 + " battery_exempt=" + power.isIgnoringBatteryOptimizations(getPackageName()));
         out.println("submitted_frames=" + submittedFrames + " last_submit_age_ms="
                 + (lastSubmittedAt == 0 ? -1 : SystemClock.elapsedRealtime() - lastSubmittedAt));
-        if (session != null) {
-            PhoneQuoteSession.RateSample sample = session.sample();
-            out.println("trade_sent=" + sample.tradeSentTotal + " trade_ok=" + sample.tradeOkTotal
-                    + " depth_sent=" + sample.depthSentTotal + " depth_ok=" + sample.depthOkTotal);
-        }
-        if (received != null) {
-            JSONObject book = received.optJSONObject("book");
-            out.println("quote_at=" + received.optString("quote_at")
+        for (Map.Entry<String, PhoneDisplayFeed> stock : sessions.entrySet()) {
+            PhoneQuoteSession.RateSample sample = stock.getValue().sample();
+            JSONObject quote = received.get(stock.getKey());
+            JSONObject book = quote == null ? null : quote.optJSONObject("book");
+            out.println("symbol=" + stock.getKey() + " trade_sent=" + sample.tradeSentTotal + " trade_ok=" + sample.tradeOkTotal
+                    + " depth_sent=" + sample.depthSentTotal + " depth_ok=" + sample.depthOkTotal
                     + " book_at=" + (book == null ? "" : book.optString("source_at")));
-        }
-        if (lowerSession != null) {
-            PhoneQuoteSession.RateSample sample = lowerSession.sample();
-            JSONObject book = lowerReceived == null ? null : lowerReceived.optJSONObject("book");
-            out.println("lower_symbol=" + PhoneDisplayStocks.second(prefs) + " depth_sent=" + sample.depthSentTotal
-                    + " depth_ok=" + sample.depthOkTotal + " book_at=" + (book == null ? "" : book.optString("source_at")));
         }
     }
 }

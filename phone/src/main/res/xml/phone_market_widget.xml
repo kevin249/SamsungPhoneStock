@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="250dp" android:minHeight="150dp" android:minResizeWidth="120dp"
-    android:minResizeHeight="62dp" android:targetCellWidth="4" android:targetCellHeight="3"
+    android:minWidth="250dp" android:minHeight="332dp" android:minResizeWidth="120dp"
+    android:minResizeHeight="62dp" android:targetCellWidth="4" android:targetCellHeight="5"
     android:resizeMode="horizontal|vertical" android:widgetCategory="home_screen|keyguard"
     android:updatePeriodMillis="1800000" android:description="@string/phone_market_widget_description"
-    android:initialLayout="@layout/phone_market_widget_zsingle" android:initialKeyguardLayout="@layout/phone_market_widget_zsingle"
+    android:initialLayout="@layout/phone_market_widget_zsingle" android:initialKeyguardLayout="@layout/phone_market_widget_zzz_passive_single"
     android:previewImage="@drawable/phone_market_widget_preview" />

@@ -8,8 +8,8 @@ android {
         applicationId 'com.kevin.phonekline'
         minSdk 26
         targetSdk 34
-        versionCode 21
-        versionName '1.20'
+        versionCode 26
+        versionName '1.25'
         testInstrumentationRunner 'com.kevin.phonekline.PhoneRenderInstrumentation'
     }
     compileOptions {

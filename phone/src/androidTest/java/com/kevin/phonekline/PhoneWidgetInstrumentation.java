@@ -9,13 +9,17 @@ import android.content.BroadcastReceiver;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.BatteryManager;
+import android.os.Bundle;
+import android.os.SystemClock;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.view.Display;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -27,7 +31,12 @@ import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /** One UI owns the ambient clock. Exercise the separate, quote-only RemoteViews as an external host. */
 final class PhoneWidgetInstrumentation {
@@ -47,7 +56,12 @@ final class PhoneWidgetInstrumentation {
             android.util.Log.i("PhoneRegression", "widget: checkPowerRates(context,prefs)");
             checkPowerRates(context,prefs);
             PhoneDualWidgetInstrumentation.check(context,host,prefs);
+            checkUnlockGestures(context, host, prefs);
+            checkFullChartHeights(context, host, prefs, data);
+            checkTenVisibleCharts(context, host, prefs);
             prefs.edit().clear().putString("symbol", "sz000063").putInt("aod_theme", 104)
+                    .putInt(PhoneDisplayStocks.HEIGHT_PREFIX + "sz000063", 0)
+                    .putInt(PhoneDisplayStocks.HEIGHT_PREFIX + "sh600519", 0)
                     .putString("chart_mode", "1m").putBoolean("show_depth", true).putBoolean("show_signals", true).commit();
             RemoteViews first = render(context, ID, data);
             android.util.Log.i("PhoneRegression", "widget: checkWallpaperVisibility()");
@@ -148,9 +162,7 @@ final class PhoneWidgetInstrumentation {
         return false;
     }
 
-    private static void checkBoundHostUpgrade(Context target, Context hostContext, int oldId, int shippedId, RemoteViews next) {
-        RemoteViews old = new RemoteViews(target.getPackageName(), oldId);
-        require(oldId == shippedId && oldId != next.getLayoutId(), "distinct upgrade layout ID");
+    private static AppWidgetHostView boundHost(Context target, Context hostContext) {
         AppWidgetHostView host = new AppWidgetHostView(hostContext);
         AppWidgetManager manager = AppWidgetManager.getInstance(target);
         AppWidgetProviderInfo info = null;
@@ -159,6 +171,321 @@ final class PhoneWidgetInstrumentation {
         }
         require(info != null, "installed widget provider");
         host.setAppWidget(ID, info);
+        return host;
+    }
+
+    private static void checkUnlockGestures(Context target, Context hostContext, SharedPreferences prefs) {
+        String a = "sz000063", b = "sh600000", c = "sz000001";
+        prefs.edit().putInt(PhoneDisplayStocks.HEIGHT_PREFIX + a, 0)
+                .putInt(PhoneDisplayStocks.HEIGHT_PREFIX + b, 0).apply();
+        AppWidgetHostView host = boundHost(target, hostContext);
+        checkPassiveUpgrade(target, host, prefs, Collections.singletonList(a), Collections.emptySet(),
+                285, R.layout.phone_market_widget_zsingle, R.id.widget_root, false);
+        checkPassiveUpgrade(target, host, prefs, Arrays.asList(a, b), Collections.emptySet(),
+                285, R.layout.phone_market_widget_zdual, R.id.widget_root, false);
+        checkPassiveUpgrade(target, host, prefs, Arrays.asList(a, b), Collections.singleton(a),
+                285, R.layout.phone_market_widget_zzstack, R.id.widget_zz_mini_row, false);
+        checkPassiveUpgrade(target, host, prefs, Arrays.asList(a, b, c), new HashSet<>(Arrays.asList(a, c)),
+                79, R.layout.phone_market_widget_zzstack, R.id.widget_zz_mini_row, true);
+    }
+
+    private static void checkPassiveUpgrade(Context target, AppWidgetHostView host, SharedPreferences prefs,
+                                            List<String> stocks, Set<String> minis, int height,
+                                            int shippedLayout, int rowId, boolean paged) {
+        PhoneDisplayStocks.save(prefs, stocks, minis);
+        prefs.edit().putInt(PhoneWidgetRenderer.PAGE + ID, 0).apply();
+        RemoteViews desktop = PhoneWidgetRenderer.render(target, ID, null, 300, height, "realtime", true);
+        require(desktop.getLayoutId() == shippedLayout, "desktop retains its existing layout");
+        host.updateAppWidget(desktop);
+        View old = host.getChildAt(0);
+        require(old.findViewById(rowId).hasOnClickListeners(), "desktop stock remains actionable");
+        if (paged) {
+            View next = old.findViewById(R.id.widget_zz_next_page);
+            require(next.getVisibility() == View.VISIBLE && next.hasOnClickListeners(), "desktop next page remains actionable");
+        }
+        // The in-place host starts with the same layout IDs and clickable descendants as v1.21.
+        // INVALID_APPWIDGET_ID has no host metadata. It must take the same passive path as LockStar.
+        RemoteViews passive = PhoneWidgetRenderer.render(target, ID, null, 300, height, "realtime");
+        host.updateAppWidget(passive);
+        View root = host.getChildAt(0);
+        require(root != old, "upgrade replaces previously clickable hierarchy");
+        if (paged) require(((ViewGroup)root.findViewById(R.id.widget_zz_stock_rows)).getChildCount() > 0, "passive page retains stocks");
+        else require(root.findViewById(rowId) != null, "passive host retains the stock");
+        if (paged) {
+            TextView page = root.findViewById(R.id.widget_zz_next_page);
+            require(page.getVisibility() == View.VISIBLE && !page.getText().toString().contains("下一页"), "passive page indicator");
+        }
+        int widthPx = Math.round(300 * target.getResources().getDisplayMetrics().density);
+        int heightPx = Math.round(height * target.getResources().getDisplayMetrics().density);
+        for (int update = 0; update < 2; update++) {
+            if (update != 0) host.updateAppWidget(passive);
+            root = host.getChildAt(0);
+            root.measure(View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(heightPx, View.MeasureSpec.EXACTLY));
+            root.layout(0, 0, widthPx, heightPx);
+            requirePassiveTree(root);
+            for (float y : new float[]{2, heightPx / 2f, heightPx - 2}) {
+                long now = SystemClock.uptimeMillis();
+                MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, widthPx / 2f, y, 0);
+                try { require(!root.dispatchTouchEvent(down), "lockscreen quote must yield swipe start at y=" + y); }
+                finally { down.recycle(); }
+            }
+        }
+    }
+
+    private static void requirePassiveTree(View view) {
+        require(!view.isClickable() && !view.isLongClickable() && !view.hasOnClickListeners(),
+                "touchable lockscreen descendant id=" + view.getId());
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup)view;
+            for (int i = 0; i < group.getChildCount(); i++) requirePassiveTree(group.getChildAt(i));
+        }
+    }
+
+    private static void checkFullChartHeights(Context target, Context hostContext, SharedPreferences prefs, JSONObject quote) throws Exception {
+        String full = quote.optString("symbol"), b = "sh600000", c = "sz000001";
+        prefs.edit().clear().putBoolean(PhoneDisplayWindow.AUTOMATIC, false)
+                .putString(PhoneDisplayWindow.MODE, "realtime").commit();
+        PhoneDisplayStocks.save(prefs, Arrays.asList(full, b, c), new HashSet<>(Arrays.asList(b, c)));
+        for (String symbol : Arrays.asList(b, c)) {
+            JSONObject mini = new JSONObject(quote.toString()).put("symbol", symbol).put("name", symbol.substring(2));
+            prefs.edit().putString("snapshot_" + symbol, mini.toString()).apply();
+        }
+        AppWidgetHostView host = boundHost(target, hostContext);
+        PhoneSystemDisplay display = new PhoneSystemDisplay(target, false, () -> {});
+        PhoneWidgetPresentation dream = display.contentView();
+        String heightKey = PhoneDisplayStocks.HEIGHT_PREFIX + full;
+        require(!prefs.contains(heightKey) && PhoneDisplayStocks.fullHeightDp(prefs, full) == 332,
+                "missing full-chart preference uses 332 dp");
+        View tall = measuredPassiveWidget(target, host, quote, 420);
+        ViewGroup rows = tall.findViewById(R.id.widget_zz_stock_rows);
+        require(rows.getChildCount() == 3, "default full chart and both Mini K rows fit in a tall host");
+        checkHeightDp(rows.getChildAt(0), 332);
+        checkHeightDp(rows.getChildAt(1), 26);
+        checkHeightDp(rows.getChildAt(2), 26);
+        int previousPlot = 0;
+        for (int dp : new int[]{104, 130}) {
+            prefs.edit().putInt(heightKey, dp).apply();
+            View root = compareDreamWithWidget(target, host, dream, quote);
+            rows = root.findViewById(R.id.widget_zz_stock_rows);
+            require(rows.getChildCount() == 3, "custom full panel fits with two Mini K rows");
+            checkHeightDp(rows.getChildAt(0), dp);
+            checkHeightDp(rows.getChildAt(0).findViewById(R.id.widget_root), dp);
+            checkHeightDp(rows.getChildAt(1), 26);
+            checkHeightDp(rows.getChildAt(2), 26);
+            View plot = rows.getChildAt(0).findViewById(R.id.widget_plot);
+            require(plot.getVisibility() == View.VISIBLE && plot.getHeight() > previousPlot,
+                    "increasing full height grows the chart in the same host");
+            previousPlot = plot.getHeight();
+        }
+        prefs.edit().putInt(heightKey, 312).apply();
+        View fitted = compareDreamWithWidget(target, host, dream, quote);
+        rows = fitted.findViewById(R.id.widget_zz_stock_rows);
+        require(rows.getChildCount() == 3 && fitted.findViewById(R.id.widget_zz_next_page).getVisibility() == View.GONE,
+                "shrinking the full chart keeps both Mini K rows on the page");
+        checkHeightDp(rows.getChildAt(0), 166);
+        checkHeightDp(rows.getChildAt(1), 26);
+        checkHeightDp(rows.getChildAt(2), 26);
+        dream.clearFrame();
+        require(dream.findViewById(R.id.widget_zz_stock_rows) == null
+                        && display.view.getImportantForAccessibility() == View.IMPORTANT_FOR_ACCESSIBILITY_YES,
+                "removing the LockStar frame restores the standalone charging display");
+        display.close();
+
+        prefs.edit().putInt(heightKey, 0).apply();
+        View auto = measuredPassiveWidget(target, host, quote, 420);
+        rows = auto.findViewById(R.id.widget_zz_stock_rows);
+        checkHeightDp(rows.getChildAt(0), 368);
+        prefs.edit().remove(heightKey).apply();
+        View restored = measuredPassiveWidget(target, host, quote, 420);
+        rows = restored.findViewById(R.id.widget_zz_stock_rows);
+        checkHeightDp(rows.getChildAt(0), 332);
+
+        PhoneDisplayStocks.save(prefs, Arrays.asList(full, b), Collections.emptySet());
+        prefs.edit().putInt(heightKey, 104).putInt(PhoneDisplayStocks.HEIGHT_PREFIX + b, 156).apply();
+        View two = measuredPassiveWidget(target, host, quote, 300);
+        rows = two.findViewById(R.id.widget_zz_stock_rows);
+        require(rows.getChildCount() == 2, "custom full chart heights coexist");
+        checkHeightDp(rows.getChildAt(0), 104);
+        checkHeightDp(rows.getChildAt(1), 156);
+
+        PhoneDisplayStocks.save(prefs, Arrays.asList(full, c, b), Collections.singleton(c));
+        prefs.edit().putInt(heightKey, 260).apply();
+        View mixed = measuredPassiveWidget(target, host, quote, 346);
+        rows = mixed.findViewById(R.id.widget_zz_stock_rows);
+        require(rows.getChildCount() == 3 && mixed.findViewById(R.id.widget_zz_next_page).getVisibility() == View.GONE,
+                "mixed-height charts share a page");
+        checkHeightDp(rows.getChildAt(0), 200);
+        checkHeightDp(rows.getChildAt(1), 26);
+        checkHeightDp(rows.getChildAt(2), 120);
+        for (int i : new int[]{0, 2}) {
+            View panel = rows.getChildAt(i);
+            ImageView image = panel.findViewById(R.id.widget_plot);
+            require(image.getVisibility() == View.VISIBLE && image.getHeight() > 0 && image.getDrawable() != null,
+                    "proportional fitting preserves the plot for full row " + i);
+        }
+        String d = "sh600001";
+        PhoneDisplayStocks.save(prefs, Arrays.asList(full, c, b, d), new HashSet<>(Arrays.asList(c, d)));
+        prefs.edit().remove(heightKey).remove(PhoneDisplayStocks.HEIGHT_PREFIX + b).apply();
+        View tight = measuredPassiveWidget(target, host, quote, 218);
+        rows = tight.findViewById(R.id.widget_zz_stock_rows);
+        require(rows.getChildCount() == 4 && tight.findViewById(R.id.widget_zz_next_page).getVisibility() == View.GONE,
+                "two default charts and two Mini K rows share the original LockStar host");
+        for (int i = 0; i < rows.getChildCount(); i++) {
+            boolean mini = i % 2 == 1;
+            View panel = rows.getChildAt(i);
+            checkHeightDp(panel, mini ? 26 : 83);
+            if (!mini) {
+                ImageView image = panel.findViewById(R.id.widget_plot);
+                require(image.getVisibility() == View.VISIBLE && image.getHeight() > 0 && image.getDrawable() != null,
+                        "compressed default chart remains visible " + i);
+            }
+        }
+    }
+
+    private static View compareDreamWithWidget(Context target, AppWidgetHostView host, PhoneWidgetPresentation dream, JSONObject quote) {
+        Bundle options = new Bundle();
+        options.putSize("semWidgetSize", new android.util.Size(363, 218));
+        options.putInt("semAppWidgetColumnSpan", 4);
+        options.putInt("semAppWidgetRowSpan", 3);
+        options.putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 363);
+        options.putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 218);
+        RemoteViews frame = PhoneWidgetRenderer.render(target, ID, quote, options, false);
+        View lock = measuredPassiveWidget(host, frame, 218);
+        int width = lock.getWidth(), height = lock.getHeight();
+        // LockStar can allocate a few more physical pixels than the dp size reported to the app.
+        layoutExactly(lock, width + 9, height + 7);
+        View content = lock.findViewById(R.id.widget_zzzz_presentation_content);
+        require(content != null && content.getWidth() == width && content.getHeight() == height,
+                "LockStar preserves reported chart dimensions inside its larger host");
+        Rect bounds = new Rect();
+        content.getDrawingRect(bounds);
+        ((ViewGroup) lock).offsetDescendantRectToMyCoords(content, bounds);
+        require(bounds.top == 0 && Math.abs(bounds.left + bounds.right - lock.getWidth()) <= 1,
+                "LockStar charts align at the top center");
+        // Feed the same published frame into the charging service's real content view. The test
+        // has its own stock preferences and does not require changing the user's LockStar binding.
+        dream.showFrame(frame, 363, 218);
+        float density = target.getResources().getDisplayMetrics().density;
+        int w = Math.round(411 * density), h = Math.round(891 * density);
+        layoutExactly(dream, w, h);
+        ViewGroup expected = lock.findViewById(R.id.widget_zz_stock_rows);
+        ViewGroup actual = dream.findViewById(R.id.widget_zz_stock_rows);
+        require(actual != null && actual.getChildCount() == expected.getChildCount(), "charging dream shows every LockStar row");
+        View widget = dream.getChildAt(1);
+        require(widget.getScaleY() == 1f && widget.getScaleX() == 1f && widget.getWidth() == width
+                        && widget.getHeight() == height, "charging dream preserves the LockStar frame size");
+        require(text(dream, R.id.widget_zz_next_page).equals(text(lock, R.id.widget_zz_next_page)), "matching charging page");
+        for (int i = 0; i < expected.getChildCount(); i++) {
+            View a = expected.getChildAt(i), b = actual.getChildAt(i);
+            require(a.getTop() == b.getTop() && a.getHeight() == b.getHeight() && a.getWidth() == b.getWidth(),
+                    "charging stock row geometry " + i);
+            Bitmap reference = Bitmap.createBitmap(a.getWidth(), a.getHeight(), Bitmap.Config.ARGB_8888);
+            Bitmap rendered = Bitmap.createBitmap(b.getWidth(), b.getHeight(), Bitmap.Config.ARGB_8888);
+            try {
+                a.draw(new Canvas(reference));
+                b.draw(new Canvas(rendered));
+                require(reference.sameAs(rendered), "charging stock row matches LockStar pixels " + i);
+            } finally { reference.recycle(); rendered.recycle(); }
+        }
+        return lock;
+    }
+
+    private static void checkTenVisibleCharts(Context target, Context hostContext, SharedPreferences prefs) throws Exception {
+        prefs.edit().clear().putBoolean(PhoneDisplayWindow.AUTOMATIC, false).putString(PhoneDisplayWindow.MODE, "1m").commit();
+        List<String> stocks = new java.util.ArrayList<>();
+        JSONArray bars = new JSONArray();
+        int index = 0;
+        for (String time : Arrays.asList("09:45", "10:00", "10:30", "11:00", "13:30", "14:00", "14:30", "14:45")) {
+            boolean rise = index++ % 2 == 0;
+            bars.put(new JSONObject().put("time", "2026-11-05 " + time).put("high", 11).put("low", 10)
+                    .put("open", rise ? 10 : 11).put("close", rise ? 11 : 10));
+        }
+        for (int i = 0; i < 10; i++) {
+            String code = "sz" + (200100 + i);
+            stocks.add(code);
+            JSONObject snapshot = new JSONObject().put("symbol", code).put("name", "压缩测试" + (i + 1))
+                    .put("date", "2026-11-05").put("quote_at", "2026-11-05 14:45:00")
+                    .put("price", 10).put("previous", 10.25).put("high", 11).put("low", 10).put("bars", bars);
+            prefs.edit().putString("snapshot_" + code, snapshot.toString()).apply();
+        }
+        PhoneDisplayStocks.save(prefs, stocks, Collections.emptySet());
+        AppWidgetHostView host = boundHost(target, hostContext);
+        RemoteViews frame = PhoneWidgetRenderer.render(target, ID, null, 363, 330, "1m", false);
+        View root = measuredPassiveWidget(host, frame, 330);
+        ViewGroup rows = root.findViewById(R.id.widget_zz_stock_rows);
+        require(rows.getChildCount() == 10 && root.findViewById(R.id.widget_zz_next_page).getVisibility() == View.GONE,
+                "ten full charts fit in one 330 dp widget");
+        for (int i = 0; i < rows.getChildCount(); i++) {
+            View row = rows.getChildAt(i);
+            checkHeightDp(row, 33);
+            require(row.getBottom() <= rows.getHeight()
+                            && row.findViewById(R.id.widget_root).getContentDescription().toString().contains(stocks.get(i).substring(2)),
+                    "visible compact quote in stock order " + i);
+            ImageView plot = row.findViewById(R.id.widget_plot);
+            require(plot.getVisibility() == View.VISIBLE && plot.getHeight() > 0, "compact chart bounds " + i);
+            Bitmap rendered = Bitmap.createBitmap(plot.getWidth(), plot.getHeight(), Bitmap.Config.ARGB_8888);
+            try {
+                plot.draw(new Canvas(rendered));
+                require(hasBothCandleColors(rendered), "compact chart draws rising and falling candles " + i);
+            } finally { rendered.recycle(); }
+        }
+    }
+
+    private static boolean hasBothCandleColors(Bitmap rendered) {
+        boolean up = false, down = false;
+        int[] line = new int[rendered.getWidth()];
+        for (int y = 0; y < rendered.getHeight() && !(up && down); y++) {
+            rendered.getPixels(line, 0, line.length, 0, y, line.length, 1);
+            for (int ink : line) {
+                if (Color.alpha(ink) < 70) continue;
+                up |= sameInk(ink, PhoneMarketPlot.WIDGET_UP);
+                down |= sameInk(ink, PhoneMarketPlot.WIDGET_DOWN);
+            }
+        }
+        return up && down;
+    }
+
+    private static boolean sameInk(int actual, int expected) {
+        return Math.abs(Color.red(actual) - Color.red(expected)) < 8
+                && Math.abs(Color.green(actual) - Color.green(expected)) < 8
+                && Math.abs(Color.blue(actual) - Color.blue(expected)) < 8;
+    }
+
+    private static View measuredPassiveWidget(Context target, AppWidgetHostView host, JSONObject quote, int heightDp) {
+        return measuredPassiveWidget(host, PhoneWidgetRenderer.render(target, ID, quote, 363, heightDp, "realtime", false), heightDp);
+    }
+
+    private static View measuredPassiveWidget(AppWidgetHostView host, RemoteViews frame, int heightDp) {
+        host.updateAppWidget(frame);
+        View root = host.getChildAt(0);
+        float density = root.getResources().getDisplayMetrics().density;
+        int w = Math.round(363 * density), h = Math.round(heightDp * density);
+        layoutExactly(root, w, h);
+        requirePassiveTree(root);
+        long time = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, w / 2f, h / 4f, 0);
+        try { require(!root.dispatchTouchEvent(down), "resized LockStar chart yields swipe start"); }
+        finally { down.recycle(); }
+        return root;
+    }
+
+    private static void layoutExactly(View view, int width, int height) {
+        view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, width, height);
+    }
+
+    private static void checkHeightDp(View view, int expected) {
+        int pixels = Math.round(expected * view.getResources().getDisplayMetrics().density);
+        require(Math.abs(view.getHeight() - pixels) <= 1,
+                "expected " + expected + "dp (" + pixels + "px), measured " + view.getHeight() + "px");
+    }
+
+    private static void checkBoundHostUpgrade(Context target, Context hostContext, int oldId, int shippedId, RemoteViews next) {
+        RemoteViews old = new RemoteViews(target.getPackageName(), oldId);
+        require(oldId == shippedId && oldId != next.getLayoutId(), "distinct upgrade layout ID");
+        AppWidgetHostView host = boundHost(target, hostContext);
         host.updateAppWidget(old);
         View oldRoot = host.getChildAt(0);
         require(oldRoot instanceof ViewGroup, "existing host widget");

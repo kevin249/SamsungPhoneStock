@@ -12,7 +12,9 @@ import java.time.LocalDateTime;
 /** Check lower mode isolation, both surface types, and removal without changing user preferences. */
 final class PhoneDualChartInstrumentation {
     static void check(Context context, SharedPreferences prefs) throws Exception {
-        prefs.edit().putString("chart_mode","realtime").apply();
+        prefs.edit().putString("chart_mode","realtime")
+                .putInt(PhoneDisplayStocks.HEIGHT_PREFIX + "sh603986", 0)
+                .putInt(PhoneDisplayStocks.HEIGHT_PREFIX + "sz000063", 0).apply();
         JSONObject upper=fixture("sh603986",false), lower=fixture("sz000063",false), days=fixture("sz000063",true);
         PhoneCandleView view=new PhoneCandleView(context);
         view.layout(0,0,540,1170);
